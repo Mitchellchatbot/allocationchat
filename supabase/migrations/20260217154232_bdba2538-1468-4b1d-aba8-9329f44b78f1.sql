@@ -1,0 +1,1 @@
+ALTER TABLE public.properties ADD COLUMN human_typos_enabled boolean DEFAULT true;

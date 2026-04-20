@@ -1,0 +1,1 @@
+ALTER TABLE public.properties ADD COLUMN calendly_url text DEFAULT NULL;

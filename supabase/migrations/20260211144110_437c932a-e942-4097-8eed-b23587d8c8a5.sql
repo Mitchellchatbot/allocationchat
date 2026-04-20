@@ -1,0 +1,1 @@
+ALTER TABLE public.salesforce_settings ADD COLUMN IF NOT EXISTS pending_code_verifier text;

@@ -1,0 +1,1 @@
+ALTER TABLE public.properties ADD COLUMN IF NOT EXISTS insurance_collection_prompt text DEFAULT null;

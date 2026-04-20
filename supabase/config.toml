@@ -1,0 +1,133 @@
+project_id = "qnafaecxrokafizyozpx"
+
+[functions.sync-conversation-data]
+verify_jwt = false
+
+[functions.salesforce-oauth-callback]
+verify_jwt = false
+
+[functions.widget-conversation-presence]
+verify_jwt = false
+
+[functions.widget-bootstrap]
+verify_jwt = false
+
+[functions.widget-create-conversation]
+verify_jwt = false
+
+[functions.widget-save-message]
+verify_jwt = false
+
+[functions.widget-get-messages]
+verify_jwt = false
+
+[functions.update-visitor]
+verify_jwt = false
+
+[functions.get-property-settings]
+verify_jwt = false
+
+[functions.get-property-ai-agents]
+verify_jwt = false
+
+[functions.track-page-analytics]
+verify_jwt = false
+
+[functions.get-visitor-location]
+verify_jwt = false
+
+[functions.extract-visitor-info]
+verify_jwt = false
+
+[functions.chat-ai]
+verify_jwt = false
+
+[functions.send-welcome-email]
+verify_jwt = false
+
+[functions.send-password-reset]
+verify_jwt = false
+
+[functions.sales-chat]
+verify_jwt = false
+
+[functions.create-agent-account]
+verify_jwt = false
+
+[functions.salesforce-export-leads]
+verify_jwt = false
+
+[functions.salesforce-describe-lead]
+verify_jwt = false
+
+[functions.send-agent-invitation]
+verify_jwt = false
+
+[functions.purge-expired-data]
+verify_jwt = false
+
+[functions.close-stale-conversations]
+verify_jwt = false
+
+[functions.send-email-notification]
+verify_jwt = false
+
+[functions.slack-oauth-callback]
+verify_jwt = false
+
+[functions.slack-oauth-start]
+verify_jwt = false
+
+[functions.send-slack-notification]
+verify_jwt = false
+
+[functions.google-chat-oauth-start]
+verify_jwt = false
+
+[functions.google-chat-bulk-connect]
+verify_jwt = false
+
+[functions.google-chat-oauth-callback]
+verify_jwt = false
+
+[functions.send-google-chat-notification]
+verify_jwt = false
+
+[functions.salesforce-oauth-start]
+verify_jwt = false
+
+[functions.run-scheduled-extraction]
+verify_jwt = false
+
+[functions.comparison-chat]
+verify_jwt = false
+
+[functions.create-shared-login]
+verify_jwt = false
+
+[functions.check-subscription]
+verify_jwt = false
+
+[functions.create-checkout-session]
+verify_jwt = false
+
+[functions.create-billing-portal]
+verify_jwt = false
+
+[functions.salesforce-bulk-connect]
+verify_jwt = false
+
+[functions.improve-insurance-prompt]
+verify_jwt = false
+
+[functions.send-payment-reminders]
+verify_jwt = false
+
+[functions.sync-stripe-subscriptions]
+verify_jwt = false
+
+[functions.refresh-salesforce-tokens]
+verify_jwt = false
+
+[functions.admin-impersonate]
+verify_jwt = false

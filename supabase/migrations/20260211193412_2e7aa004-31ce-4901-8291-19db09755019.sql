@@ -1,0 +1,1 @@
+ALTER TABLE public.salesforce_settings ADD COLUMN auto_export_on_phone_detected boolean NOT NULL DEFAULT false;

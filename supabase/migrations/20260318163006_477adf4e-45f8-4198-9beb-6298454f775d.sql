@@ -1,0 +1,1 @@
+ALTER TABLE public.salesforce_settings ADD COLUMN IF NOT EXISTS no_insurance_card_lead_status text DEFAULT NULL;

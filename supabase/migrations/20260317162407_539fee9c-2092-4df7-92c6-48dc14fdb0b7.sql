@@ -1,0 +1,1 @@
+ALTER TABLE public.salesforce_settings ADD COLUMN login_url text;

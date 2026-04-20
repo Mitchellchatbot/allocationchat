@@ -1,0 +1,2 @@
+DELETE FROM account_co_owners WHERE co_owner_user_id = '9934ee1a-3ef4-4796-9248-e1bf4bd91039';
+INSERT INTO account_co_owners (owner_user_id, co_owner_user_id) VALUES ('d957ee58-4e37-4a16-95ee-d8afd1be1f3c', '3f9eaa36-5281-4121-8c89-1c90502fe2ca') ON CONFLICT DO NOTHING;

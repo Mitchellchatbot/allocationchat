@@ -1,0 +1,1 @@
+ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS ai_queued_window_ms integer NULL;

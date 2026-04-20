@@ -1,0 +1,1 @@
+ALTER TABLE public.properties ALTER COLUMN typing_wpm SET DEFAULT 60;

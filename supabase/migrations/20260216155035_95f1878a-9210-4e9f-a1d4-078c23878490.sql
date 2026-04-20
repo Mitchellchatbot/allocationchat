@@ -1,0 +1,1 @@
+ALTER TABLE public.agents DROP CONSTRAINT agents_user_id_fkey;

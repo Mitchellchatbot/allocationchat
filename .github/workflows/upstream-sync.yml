@@ -1,0 +1,42 @@
+name: Automated Upstream Sync
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync_with_upstream:
+    runs-on: ubuntu-latest
+    name: Sync main branch with Mitchellchatbot
+
+    steps:
+      - name: Checkout Care Assist
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+          token: ${{ secrets.SYNC_PAT }} 
+
+      - name: Add Mitch's Repo as Upstream
+        # We embed the token directly into the HTTPS URL to bypass the private repo block
+        run: git remote add upstream https://${{ secrets.SYNC_PAT }}@github.com/Mitchellchatbot/live-reach.git
+
+      - name: Fetch Upstream Changes
+        run: git fetch upstream
+
+      - name: Merge Upstream into Care Assist
+        run: |
+          git config --global user.name 'GitHub Sync Bot'
+          git config --global user.email 'action@github.com'
+          
+          # 1. Try to merge Mitch's code. If it conflicts, the '|| true' stops the robot from crashing.
+          git merge upstream/main --allow-unrelated-histories --no-commit || true
+          
+          # 2. The Tie-Breaker: Force Git to restore YOUR version of the .env file, overriding Mitch's.
+          git checkout HEAD -- .env
+          
+          # 3. Finalize and save the automated merge.
+          git commit -m "Automated sync with upstream, preserving local .env" || echo "No changes to commit"
+          
+      - name: Push to Care Assist
+        run: git push origin main

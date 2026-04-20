@@ -1,0 +1,48 @@
+name: Deploy Supabase Functions
+
+on:
+  push:
+    branches:
+      - main
+    # This tells the robot to ONLY run if files inside the functions folder are changed
+    paths:
+      - 'supabase/functions/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Checkout Care Assist
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy Secure Functions
+        run: |
+          echo "Deploying all standard secure functions..."
+          supabase functions deploy --project-ref $PROJECT_ID
+
+      - name: Deploy Public Widget Functions (No JWT)
+        run: |
+          echo "Re-deploying public widget functions to bypass JWT..."
+          # These are the same public functions we identified earlier
+          PUBLIC_FUNCTIONS=(
+            "chat-ai" "check-subscription" "close-stale-conversations" "comparison-chat" "create-agent-account" "create-billing-portal" "create-checkout-session" "create-shared-login" "export-data-backup" "extract-brand-colors" "extract-visitor-info" "extract-website-info" "generate-demo-script" "generate-greeting" "get-property-ai-agents" "get-property-settings" "get-visitor-location" "purge-expired-data" "run-health-checks" "run-scheduled-extraction" "sales-chat" "salesforce-bulk-connect" "salesforce-describe-lead" "salesforce-encrypt-migrate" "salesforce-export-leads" "salesforce-oauth-callback" "salesforce-oauth-start" "send-2fa-code" "send-agent-invitation" "send-email-notification" "send-password-reset" "send-slack-notification" "send-welcome-email" "slack-oauth-callback" "slack-oauth-start" "track-page-analytics" "update-visitor" "verify-2fa-code" "widget-bootstrap" "widget-conversation-presence" "widget-create-conversation" "widget-get-messages" "widget-save-message" "widget-set-ai-queue"
+          )
+          
+          for func in "${PUBLIC_FUNCTIONS[@]}"; do
+            # We check if the folder actually exists before trying to deploy it
+            if [ -d "supabase/functions/$func" ]; then
+              echo "Deploying public function: $func"
+              supabase functions deploy "$func" --project-ref $PROJECT_ID --no-verify-jwt
+            fi
+          done

@@ -1,0 +1,1 @@
+UPDATE properties SET ai_response_delay_min_ms = 15000, ai_response_delay_max_ms = 15000 WHERE ai_response_delay_min_ms = 30000 AND ai_response_delay_max_ms = 60000;

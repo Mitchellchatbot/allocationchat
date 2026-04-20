@@ -1,0 +1,372 @@
+care-assist/
+├── .env
+├── .lovable/
+│   └── plan.md
+├── capacitor.config.ts
+├── components.json
+├── eslint.config.js
+├── index.html
+├── package.json
+├── postcss.config.js
+├── README.md
+├── tailwind.config.ts
+├── tsconfig.json
+├── tsconfig.app.json
+├── tsconfig.node.json
+├── vite.config.ts
+│
+├── public/
+│   ├── favicon.ico
+│   ├── favicon.png
+│   ├── favicon.svg
+│   ├── og-image.png
+│   ├── placeholder.svg
+│   ├── robots.txt
+│   └── sitemap.xml
+│
+├── src/
+│   ├── main.tsx
+│   ├── App.tsx
+│   ├── App.css
+│   ├── index.css
+│   ├── WidgetApp.tsx
+│   ├── vite-env.d.ts
+│   │
+│   ├── assets/
+│   │   ├── care-assist-icon.png
+│   │   ├── care-assist-logo.png
+│   │   ├── embed-black-box.png
+│   │   ├── samantha-checklist-v2.png
+│   │   ├── scaled-bot-logo.png
+│   │   ├── scaled-bot-logo.svg
+│   │   ├── logos/
+│   │   │   ├── bell-colorful.svg
+│   │   │   ├── calendly-logo.png
+│   │   │   ├── calendly.svg
+│   │   │   ├── gmail.svg
+│   │   │   ├── google-calendar.svg
+│   │   │   ├── google-g.svg
+│   │   │   ├── outlook.png
+│   │   │   ├── salesforce.svg
+│   │   │   ├── slack.svg
+│   │   │   └── subscription-card.svg
+│   │   ├── personas/
+│   │   │   ├── daniel.jpg
+│   │   │   ├── emily.jpg
+│   │   │   ├── michael.jpg
+│   │   │   └── sarah.jpg
+│   │   └── testimonials/
+│   │       ├── jennifer.jpg
+│   │       ├── michael.jpg
+│   │       └── sarah.jpg
+│   │
+│   ├── components/
+│   │   ├── ErrorBoundary.tsx
+│   │   ├── NavLink.tsx
+│   │   ├── PropertySelector.tsx
+│   │   │
+│   │   ├── admin/
+│   │   │   ├── AdminClientTable.tsx
+│   │   │   ├── AdminComplaintsTab.tsx
+│   │   │   └── AdminStatsCards.tsx
+│   │   │
+│   │   ├── agent/
+│   │   │   └── AgentComplaintDialog.tsx
+│   │   │
+│   │   ├── auth/
+│   │   │   └── TwoFactorVerification.tsx
+│   │   │
+│   │   ├── dashboard/
+│   │   │   ├── BlogAnalytics.tsx
+│   │   │   ├── ChatPanel.tsx
+│   │   │   ├── ConversationList.tsx
+│   │   │   ├── DashboardLayout.tsx
+│   │   │   ├── DashboardSidebar.tsx
+│   │   │   ├── DashboardTour.tsx
+│   │   │   ├── FloatingSupportButton.tsx
+│   │   │   ├── HipaaTwoFactorBanner.tsx
+│   │   │   ├── NotificationsBell.tsx
+│   │   │   ├── PageHeader.tsx
+│   │   │   └── TourCelebration.tsx
+│   │   │
+│   │   ├── docs/
+│   │   │   ├── DocsLayout.tsx
+│   │   │   ├── DocsSearch.tsx
+│   │   │   ├── DocsSidebar.tsx
+│   │   │   └── InfoIndicator.tsx
+│   │   │
+│   │   ├── landing/
+│   │   │   ├── LPDemoWidget.tsx
+│   │   │   └── SalesChatBot.tsx
+│   │   │
+│   │   ├── pricing/
+│   │   │   ├── PricingData.ts
+│   │   │   └── PricingSection.tsx
+│   │   │
+│   │   ├── settings/
+│   │   │   ├── BusinessInfoSettings.tsx
+│   │   │   ├── EmailSettings.tsx
+│   │   │   ├── HipaaSettings.tsx
+│   │   │   ├── NotificationLog.tsx
+│   │   │   ├── SalesforceBulkSettings.tsx
+│   │   │   ├── SalesforceSettings.tsx
+│   │   │   ├── SlackSettings.tsx
+│   │   │   ├── TeamManagement.tsx
+│   │   │   └── VisitorLeadsTable.tsx
+│   │   │
+│   │   ├── sidebar/
+│   │   │   ├── UserAvatarUpload.tsx
+│   │   │   └── WorkspaceSwitcher.tsx
+│   │   │
+│   │   ├── ui/
+│   │   │   ├── accordion.tsx
+│   │   │   ├── alert-dialog.tsx
+│   │   │   ├── alert.tsx
+│   │   │   ├── aspect-ratio.tsx
+│   │   │   ├── avatar-crop-dialog.tsx
+│   │   │   ├── avatar.tsx
+│   │   │   ├── badge.tsx
+│   │   │   ├── breadcrumb.tsx
+│   │   │   ├── button.tsx
+│   │   │   ├── calendar.tsx
+│   │   │   ├── card.tsx
+│   │   │   ├── carousel.tsx
+│   │   │   ├── chart.tsx
+│   │   │   ├── checkbox.tsx
+│   │   │   ├── collapsible.tsx
+│   │   │   ├── command.tsx
+│   │   │   ├── context-menu.tsx
+│   │   │   ├── dialog.tsx
+│   │   │   ├── drawer.tsx
+│   │   │   ├── dropdown-menu.tsx
+│   │   │   ├── form.tsx
+│   │   │   ├── hover-card.tsx
+│   │   │   ├── input-otp.tsx
+│   │   │   ├── input.tsx
+│   │   │   ├── label.tsx
+│   │   │   ├── loading.tsx
+│   │   │   ├── menubar.tsx
+│   │   │   ├── navigation-menu.tsx
+│   │   │   ├── pagination.tsx
+│   │   │   ├── popover.tsx
+│   │   │   ├── progress.tsx
+│   │   │   ├── radio-group.tsx
+│   │   │   ├── resizable.tsx
+│   │   │   ├── scroll-area.tsx
+│   │   │   ├── select.tsx
+│   │   │   ├── separator.tsx
+│   │   │   ├── sheet.tsx
+│   │   │   ├── sidebar.tsx
+│   │   │   ├── skeleton.tsx
+│   │   │   ├── slider.tsx
+│   │   │   ├── sonner.tsx
+│   │   │   ├── switch.tsx
+│   │   │   ├── table.tsx
+│   │   │   ├── tabs.tsx
+│   │   │   ├── textarea.tsx
+│   │   │   ├── toast.tsx
+│   │   │   ├── toaster.tsx
+│   │   │   ├── toggle-group.tsx
+│   │   │   ├── toggle.tsx
+│   │   │   ├── tooltip.tsx
+│   │   │   └── use-toast.ts
+│   │   │
+│   │   ├── video/
+│   │   │   ├── IncomingCallNotification.tsx
+│   │   │   └── VideoCallModal.tsx
+│   │   │
+│   │   └── widget/
+│   │       ├── ChatWidget.tsx
+│   │       └── WidgetEffectsCard.tsx
+│   │
+│   ├── data/
+│   │   ├── chatShortcuts.ts
+│   │   ├── documentation.ts
+│   │   └── mockData.ts
+│   │
+│   ├── hooks/
+│   │   ├── use-mobile.tsx
+│   │   ├── use-toast.ts
+│   │   ├── useAuditLog.ts
+│   │   ├── useAuth.tsx
+│   │   ├── useConversations.ts
+│   │   ├── useFormDraft.ts
+│   │   ├── useGSAP.ts
+│   │   ├── useInAppNotifications.ts
+│   │   ├── useNotificationSound.ts
+│   │   ├── usePageAnalytics.ts
+│   │   ├── usePersistedProperty.ts
+│   │   ├── useSessionTimeout.ts
+│   │   ├── useSidebarState.tsx
+│   │   ├── useUserProfile.ts
+│   │   ├── useVideoChat.ts
+│   │   ├── useWidgetChat.ts
+│   │   └── useWorkspace.tsx
+│   │
+│   ├── integrations/
+│   │   └── supabase/
+│   │       ├── client.ts
+│   │       └── types.ts
+│   │
+│   ├── lib/
+│   │   └── utils.ts
+│   │
+│   ├── pages/
+│   │   ├── AISupport.tsx
+│   │   ├── AccountSettings.tsx
+│   │   ├── AdminDashboard.tsx
+│   │   ├── AgentDashboard.tsx
+│   │   ├── Analytics.tsx
+│   │   ├── Auth.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── Demo.tsx
+│   │   ├── Documentation.tsx
+│   │   ├── Funnel.tsx
+│   │   ├── HipaaCompliance.tsx
+│   │   ├── Index.tsx
+│   │   ├── MeetSamantha.tsx
+│   │   ├── NotFound.tsx
+│   │   ├── Notifications.tsx
+│   │   ├── Onboarding.tsx
+│   │   ├── Privacy.tsx
+│   │   ├── Properties.tsx
+│   │   ├── ResetPassword.tsx
+│   │   ├── Salesforce.tsx
+│   │   ├── SlackApp.tsx
+│   │   ├── Subscription.tsx
+│   │   ├── Support.tsx
+│   │   ├── TeamMembers.tsx
+│   │   ├── Terms.tsx
+│   │   ├── WidgetEmbed.tsx
+│   │   ├── WidgetPreview.tsx
+│   │   └── docs/
+│   │       └── DocPage.tsx
+│   │
+│   ├── types/
+│   │   └── chat.ts
+│   │
+│   └── utils/
+│       └── typoInjector.ts
+│
+└── supabase/
+    ├── config.toml
+    │
+    ├── functions/
+    │   ├── chat-ai/index.ts
+    │   ├── close-stale-conversations/index.ts
+    │   ├── create-agent-account/index.ts
+    │   ├── extract-brand-colors/index.ts
+    │   ├── extract-visitor-info/index.ts
+    │   ├── extract-website-info/index.ts
+    │   ├── generate-demo-script/index.ts
+    │   ├── generate-greeting/index.ts
+    │   ├── get-property-ai-agents/index.ts
+    │   ├── get-property-settings/index.ts
+    │   ├── get-visitor-location/index.ts
+    │   ├── purge-expired-data/index.ts
+    │   ├── run-scheduled-extraction/index.ts
+    │   ├── sales-chat/index.ts
+    │   ├── salesforce-describe-lead/index.ts
+    │   ├── salesforce-encrypt-migrate/index.ts
+    │   ├── salesforce-export-leads/index.ts
+    │   ├── salesforce-oauth-callback/index.ts
+    │   ├── salesforce-oauth-start/index.ts
+    │   ├── send-2fa-code/index.ts
+    │   ├── send-agent-invitation/index.ts
+    │   ├── send-email-notification/index.ts
+    │   ├── send-password-reset/index.ts
+    │   ├── send-slack-notification/index.ts
+    │   ├── send-welcome-email/index.ts
+    │   ├── slack-oauth-callback/index.ts
+    │   ├── slack-oauth-start/index.ts
+    │   ├── track-page-analytics/index.ts
+    │   ├── update-visitor/index.ts
+    │   ├── verify-2fa-code/index.ts
+    │   ├── widget-bootstrap/index.ts
+    │   ├── widget-conversation-presence/index.ts
+    │   ├── widget-create-conversation/index.ts
+    │   ├── widget-get-messages/index.ts
+    │   ├── widget-save-message/index.ts
+    │   └── widget-set-ai-queue/index.ts
+    │
+    └── migrations/
+        ├── 20251211151845_27bab49e-8981-4e58-82ba-a6f03d21a6d7.sql
+        ├── 20251214214641_ce38dff0-cb0f-4d68-b1f0-85e24da0689f.sql
+        ├── 20251216180225_96d966c9-ac17-4820-8efd-bc0f0a98f4db.sql
+        ├── 20251216184801_959bc942-d96a-4c77-9a1d-ba28406ae9c2.sql
+        ├── 20251217111325_aaada41c-7d8e-461a-bbeb-c42a52219717.sql
+        ├── 20251217111341_42b9e84a-d1c5-4160-8bc1-7c4e5031b036.sql
+        ├── 20251217175450_1c2ea9b4-d405-4c58-9817-0b05b6418ec8.sql
+        ├── 20251230163916_4901d413-fc13-41a3-80c8-7d7fae020c27.sql
+        ├── 20251230165343_52429510-f865-43fc-bd42-dee5832642c1.sql
+        ├── 20251230171644_8fda5020-62dd-4aca-ad3d-8076bd0998d7.sql
+        ├── 20251230172621_a9ef14c2-b6e7-49d5-bc88-7e1dd5727412.sql
+        ├── 20251231180543_315dc127-7ab9-47eb-8380-c3c794c5c84f.sql
+        ├── 20251231182308_363c0b1a-7d33-42e1-bffe-3987f78bdd42.sql
+        ├── 20260106161514_d3851356-da03-4af3-b1ad-ad2e9d0e03a0.sql
+        ├── 20260106162046_2b66f199-989d-45c6-b0ca-3fbd920f9baf.sql
+        ├── 20260106165024_099bf010-7883-4ce0-a0a3-ddcc1767fc5f.sql
+        ├── 20260106171007_c1746929-5dac-4d8b-93f4-4706fa856619.sql
+        ├── 20260106181535_9df5687d-95c7-4222-bd1f-8865d69674c4.sql
+        ├── 20260106191105_102d6fc6-ed88-48ba-9868-532e47c2e4e7.sql
+        ├── 20260106192016_4a4f4927-e5ba-460f-8e7f-97bfa45d4eb9.sql
+        ├── 20260108150437_51e3953a-21fe-459e-9b81-d30cc320c81a.sql
+        ├── 20260108160351_161e7d1b-d3dc-48ab-922c-d4b03080fbcd.sql
+        ├── 20260108162136_dfd169b6-286b-4243-8165-01ca379bb75d.sql
+        ├── 20260108193544_dfeb4aea-036e-4e73-ae24-dd293eb1a25f.sql
+        ├── 20260112170822_14ea989e-838b-48d4-baee-aaaf93dce05f.sql
+        ├── 20260112172109_76ca573c-ed81-4373-9729-7b86009e5056.sql
+        ├── 20260114184537_05b8f622-f292-4ed5-9859-58d58dbc009a.sql
+        ├── 20260120211248_b7bb1b76-2c71-4bd4-903f-fdea9295ed4c.sql
+        ├── 20260122150954_b11d2c43-766c-4d3e-aa46-edbacf3e1b49.sql
+        ├── 20260122152005_2948b188-2cff-4aed-b24d-4342446a371b.sql
+        ├── 20260128172941_0f522392-4d3c-4be3-83a3-11fcf06432f8.sql
+        ├── 20260128174216_c2261943-4e51-4204-9b43-6f143a56bad2.sql
+        ├── 20260203144015_434138df-d082-458a-a100-ec8e75c0a7a8.sql
+        ├── 20260203160514_acdae1e2-1765-4ebe-af4b-aec2e6a9c5a5.sql
+        ├── 20260203161139_7867ba49-1cc3-42fe-9e1f-4d400b23fc1c.sql
+        ├── 20260203165821_23fb0d0d-1635-480d-8033-d3cb6d7b2872.sql
+        ├── 20260203170206_c4e0224b-b334-4371-8032-4ae1c5ac51bc.sql
+        ├── 20260203170937_0cbcc89e-a17e-4dc6-a412-18c6b9b86783.sql
+        ├── 20260203171208_5e9daf67-66e3-473d-b779-5f944f065e32.sql
+        ├── 20260204151048_644c90c2-6839-4f9c-ae45-7626dbdb1062.sql
+        ├── 20260204153335_9dd4e927-2b65-4739-b229-a1d876f91d5f.sql
+        ├── 20260206155606_23b52fef-abd5-4f93-9f54-14944682b438.sql
+        ├── 20260208155129_53633474-f196-41b7-bbb6-7d37fb5a56fd.sql
+        ├── 20260208160207_a3ddb3a5-36ba-4326-ba2d-4d6f58dd2540.sql
+        ├── 20260209150900_52570f65-c03e-4b67-8795-5a648cc8582f.sql
+        ├── 20260209192304_9bf0e114-0a88-4a9b-a4e1-f0ce32bc3514.sql
+        ├── 20260210174046_0076b71f-c773-4a69-bd56-84b54c4d7cd7.sql
+        ├── 20260210181830_577e2b70-a103-408e-8960-2138d5338ea8.sql
+        ├── 20260210204122_7ff8f76c-786c-4d92-a18a-f812b53b8deb.sql
+        ├── 20260211142914_ca31c8b6-eff6-4bd1-93e4-c23755d222d7.sql
+        ├── 20260211144110_437c932a-e942-4097-8eed-b23587d8c8a5.sql
+        ├── 20260211193412_2e7aa004-31ce-4901-8291-19db09755019.sql
+        ├── 20260211202829_b6c66eb6-d40e-49a0-93f6-46ca775d68b4.sql
+        ├── 20260216150348_800b7446-a97b-4aa8-b295-a4cdb45600b6.sql
+        ├── 20260216150951_a8aaba74-f032-40af-8b53-97c3769fafa6.sql
+        ├── 20260216154623_009c81b9-cdf1-4d8e-a0ee-4142806de977.sql
+        ├── 20260216155035_95f1878a-9210-4e9f-a1d4-078c23878490.sql
+        ├── 20260216155613_70c8161b-3a79-4e86-a12d-874b86373c5e.sql
+        ├── 20260216173641_32588692-78b4-4345-ac6a-6f6b6654468e.sql
+        ├── 20260217154232_bdba2538-1468-4b1d-aba8-9329f44b78f1.sql
+        ├── 20260218152008_9d2cfcc6-9c88-4da4-a2f1-a7f10fad70d0.sql
+        ├── 20260218184850_3a6cabf6-3073-4650-9913-a56be7108960.sql
+        ├── 20260218193242_2ada04c9-19d4-41e5-b6ba-70ef8fb918ec.sql
+        ├── 20260218200403_0eb1dbda-9ad7-41af-9d5c-642cc75083a5.sql
+        ├── 20260218200409_0fbaa4fb-25f9-44a8-86ff-03449c0c2bde.sql
+        ├── 20260218201839_8ab7b126-c2c8-4423-992f-866b91f882e1.sql
+        ├── 20260219163348_0572df97-5561-411e-9107-48ca791d16bc.sql
+        ├── 20260223153918_51315b05-13fc-49e7-b1ba-94ef5304a269.sql
+        ├── 20260224161252_a57074c0-6a51-4e3b-9143-094b9e61fc45.sql
+        ├── 20260303200152_a86a7a7b-01bf-4112-9401-8e86c03c5874.sql
+        ├── 20260305171511_648b6066-d3ac-4f22-a6e0-36ff79c00d85.sql
+        ├── 20260305180233_ebdce303-f5ba-43a2-b793-e995788a8fae.sql
+        ├── 20260305191646_cba5e5cf-f984-4f02-bd22-fc7839feee22.sql
+        ├── 20260306092754_4f1cefbd-500a-4513-9a2d-58fdbb0ba138.sql
+        ├── 20260306155226_77a202b3-6b76-44bb-aa73-12488c29106b.sql
+        ├── 20260306165217_30e8091b-0c99-482c-b1a8-0d826031b57d.sql
+        ├── 20260306165941_d8446834-c4d3-4868-b8df-5ed6c10f6216.sql
+        ├── 20260306170236_f726ae2f-cab1-4b81-8a6a-062340519fe9.sql
+        ├── 20260308190223_f2f46817-f53d-4c13-a1a4-523db76955b4.sql
+        └── 20260308190311_c2a4b97b-5482-4754-8857-cf5d9e31e09f.sql
