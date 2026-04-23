@@ -32,9 +32,9 @@ const PLANES = [
 
 const Plane = () => (
   <>
-    <polygon points="0,-22 38,0 0,10"  fill="#F97316" />
-    <polygon points="0,-22 -25,13 0,4" fill="#F97316" opacity={0.45} />
-    <line x1="0" y1="10" x2="-18" y2="10" stroke="#F97316" strokeWidth="2" opacity={0.3} />
+    <polygon points="0,-22 38,0 0,10"  fill="#1ab49c" />
+    <polygon points="0,-22 -25,13 0,4" fill="#1ab49c" opacity={0.45} />
+    <line x1="0" y1="10" x2="-18" y2="10" stroke="#1ab49c" strokeWidth="2" opacity={0.3} />
   </>
 );
 
@@ -161,7 +161,7 @@ export const FeatureAnnouncementModal = () => {
 
         {/* Header */}
         <div
-          style={{ background: 'linear-gradient(135deg, #F97316 0%, #ea580c 100%)' }}
+          style={{ background: 'linear-gradient(135deg, #1ab49c 0%, #138d7a 100%)' }}
           className="px-6 pt-8 pb-6 text-white"
         >
           <div
@@ -209,7 +209,7 @@ export const FeatureAnnouncementModal = () => {
                   transition: `opacity 0.3s ease ${0.3 + i * 0.09}s, transform 0.3s ease ${0.3 + i * 0.09}s`,
                 }}
               >
-                <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-orange-50 text-orange-500">
+                <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-teal-50 text-teal-600">
                   {f.icon}
                 </span>
                 {f.label}
@@ -220,7 +220,7 @@ export const FeatureAnnouncementModal = () => {
           <Button
             onClick={handleSetUp}
             className="w-full gap-2 font-semibold"
-            style={{ background: 'linear-gradient(135deg, #F97316 0%, #ea580c 100%)', border: 'none' }}
+            style={{ background: 'linear-gradient(135deg, #1ab49c 0%, #138d7a 100%)', border: 'none' }}
           >
             Set up Google Chat
             <ArrowRight className="h-4 w-4" />

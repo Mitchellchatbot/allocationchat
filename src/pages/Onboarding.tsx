@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useConversations } from '@/hooks/useConversations';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import careAssistLogo from '@/assets/scaled-bot-logo.svg';
+import allocationAssistLogo from '@/assets/allocation-assist-logo.png';
 import emilyAvatar from '@/assets/personas/emily.jpg';
 import sarahAvatar from '@/assets/personas/sarah.jpg';
 import michaelAvatar from '@/assets/personas/michael.jpg';
@@ -511,8 +511,8 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
       {/* Header */}
       <div className="p-6">
         <div className="flex items-center gap-2">
-          <img src={careAssistLogo} alt="Care Assist" className="h-8 w-8 rounded-lg" />
-          <span className="font-semibold text-foreground">Care Assist</span>
+          <img src={allocationAssistLogo} alt="Allocation Assist" className="h-8 w-8 rounded-lg" />
+          <span className="font-semibold text-foreground">Allocation Assist</span>
         </div>
       </div>
 
