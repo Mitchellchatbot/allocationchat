@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs cat *)",
+      "Bash(xargs ls *)",
+      "Bash(supabase functions *)",
+      "Bash(supabase db *)",
+      "Bash(supabase status *)",
+      "Bash(supabase --version)",
+      "Bash(supabase projects *)",
+      "Bash(curl -s 'https://oiigbvfzovhnuitprsjt.supabase.co/auth/v1/admin/users?email=admin@allocationassist.com' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9paWdidmZ6b3ZobnVpdHByc2p0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjcxNzEzOSwiZXhwIjoyMDkyMjkzMTM5fQ._5FWLT7e2OlORYzCokTpDG3mx97zeNQM_MV3WLeEO2s' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9paWdidmZ6b3ZobnVpdHByc2p0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjcxNzEzOSwiZXhwIjoyMDkyMjkzMTM5fQ._5FWLT7e2OlORYzCokTpDG3mx97zeNQM_MV3WLeEO2s')",
+      "Bash(python3 -m json.tool)",
+      "Bash(supabase secrets *)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -X POST https://oiigbvfzovhnuitprsjt.supabase.co/functions/v1/extract-website-info -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9paWdidmZ6b3ZobnVpdHByc2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MTcxMzksImV4cCI6MjA5MjI5MzEzOX0.JK8OSoHQ440ahkDSRxtHux9mgDhRRNliduhi24JTPks' -H 'Content-Type: application/json' -d '{\"url\":\"https://example.com\"}')",
+      "Bash(curl -s -w '\\\\n%{http_code}' -X POST https://oiigbvfzovhnuitprsjt.supabase.co/functions/v1/extract-website-info -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9paWdidmZ6b3ZobnVpdHByc2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MTcxMzksImV4cCI6MjA5MjI5MzEzOX0.JK8OSoHQ440ahkDSRxtHux9mgDhRRNliduhi24JTPks' -H 'Authorization: Bearer eyJhbGciOiJFUzI1NiIsImtpZCI6Ijg1OGZkODlkLWM1Y2ItNGJhNy1iMDZiLTAxZWM1OTk1MjZlMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL29paWdidmZ6b3ZobnVpdHByc2p0LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI0M2ExODExNy1kMjRhLTQzMTUtOGQ0Ny0wMjdiY2Q2ODNlYTgiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzc2ODA1MTA3LCJpYXQiOjE3NzY4MDE1MDcsImVtYWlsIjoiYWRtaW5AYWxsb2NhdGlvbmFzc2lzdC5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmdWxsX25hbWUiOiJBZG1pbiJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzc2ODAxNTA3fV0sInNlc3Npb25faWQiOiJjNmY4YjA5OC1iNjFlLTRhMzEtOTcwMS04MmExZjExODI3ZTQiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.2IBAXhThmj47Yip34qfee0H_Wgp_AG1rWh_--mBJf_7_LlgJo9fKzcsmfTr43G_6Kb6H4xJcjWGrBkp4uFegSA' -H 'Content-Type: application/json' -d '{\"url\":\"https://example.com\"}')"
+    ]
+  }
+}

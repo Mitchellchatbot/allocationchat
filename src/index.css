@@ -16,7 +16,7 @@
   }
   
   :root {
-    /* Clean, modern palette - white background with orange/blue accents */
+    /* Clean, modern palette - white background with brand teal (#1ab49c) accents */
     --background: 0 0% 100%;
     --foreground: 0 0% 8%;
 
@@ -26,8 +26,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 8%;
 
-    /* Orange primary accent */
-    --primary: 24 95% 53%;
+    /* Brand teal primary — #1ab49c */
+    --primary: 171 75% 40%;
     --primary-foreground: 0 0% 100%;
 
     /* Subtle grey for secondary */
@@ -37,46 +37,46 @@
     --muted: 220 14% 96%;
     --muted-foreground: 0 0% 35%;
 
-    /* Orange tinted accent */
-    --accent: 24 100% 96%;
-    --accent-foreground: 24 95% 45%;
+    /* Teal-tinted accent */
+    --accent: 171 60% 95%;
+    --accent-foreground: 171 75% 28%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 24 95% 53%;
+    --ring: 171 75% 40%;
 
     --radius: 1.25rem;
 
-    /* Chat specific - orange themed */
-    --chat-bubble-user: 24 95% 53%;
+    /* Chat specific - teal themed */
+    --chat-bubble-user: 171 75% 40%;
     --chat-bubble-user-foreground: 0 0% 100%;
     --chat-bubble-visitor: 220 14% 96%;
     --chat-bubble-visitor-foreground: 0 0% 8%;
-    
+
     /* Status colors */
-    --online: 142 71% 45%;
+    --online: 171 75% 45%;
     --offline: 220 9% 70%;
     --away: 45 93% 47%;
     --pending: 213 94% 50%;
 
-    /* Sidebar - clean light theme with orange accents */
+    /* Sidebar - clean light theme with teal accents */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 0 0% 15%;
-    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary: 171 75% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 100% 96%;
-    --sidebar-accent-foreground: 24 95% 40%;
+    --sidebar-accent: 171 60% 95%;
+    --sidebar-accent-foreground: 171 75% 28%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-ring: 171 75% 40%;
 
     /* Enhanced shadows & effects */
     --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.03);
     --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.05), 0 2px 4px -2px hsl(0 0% 0% / 0.03);
     --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.06), 0 4px 6px -4px hsl(0 0% 0% / 0.04);
-    --shadow-glow: 0 0 20px hsl(24 95% 53% / 0.2);
+    --shadow-glow: 0 0 20px hsl(171 75% 40% / 0.2);
   }
 
 }
@@ -189,7 +189,7 @@ html.widget-embed-mode #root {
   }
 
   .chat-gradient {
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(174 45% 42%) 100%);
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(185 70% 34%) 100%);
   }
 
   .widget-shadow {

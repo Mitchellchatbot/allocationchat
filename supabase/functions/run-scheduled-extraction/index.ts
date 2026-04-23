@@ -369,9 +369,69 @@ Deno.serve(async (req) => {
     console.error("run-scheduled-extraction: queue processing error", queueErr);
   }
 
-  console.log(`run-scheduled-extraction: completed ${processed}/${convoList.length} extractions, ${exported} exported, ${retried} retried, ${abandoned} abandoned`);
+  // ── Zoho export queue processor ────────────────────────────────────────────
+  // Why: extract-visitor-info enqueues Zoho exports on phone capture with a
+  // 5-minute delay, but nothing else was draining the queue. Group due rows
+  // by property so multi-tenant setups don't starve — zoho-export-leads in
+  // queue mode otherwise only picks one property per invocation.
+  let zohoExported = 0;
+  let zohoFailed = 0;
+  try {
+    const now = new Date().toISOString();
+    const { data: zohoQueue } = await supabase
+      .from("zoho_export_queue")
+      .select("visitor_id, property_id")
+      .eq("status", "pending")
+      .lte("next_attempt_at", now)
+      .limit(50);
 
-  return new Response(JSON.stringify({ processed, total: convoList.length, exported, retried, abandoned }), {
+    if (zohoQueue && zohoQueue.length > 0) {
+      const byProperty = new Map<string, string[]>();
+      for (const row of zohoQueue as { visitor_id: string; property_id: string }[]) {
+        const list = byProperty.get(row.property_id) ?? [];
+        list.push(row.visitor_id);
+        byProperty.set(row.property_id, list);
+      }
+
+      console.log(`run-scheduled-extraction: draining Zoho queue for ${byProperty.size} properties (${zohoQueue.length} rows)`);
+
+      for (const [pId, visitorIds] of byProperty) {
+        try {
+          const res = await fetch(`${supabaseUrl}/functions/v1/zoho-export-leads`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${serviceKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ propertyId: pId, visitorIds }),
+          });
+
+          let result: { exported?: number; skipped?: number; errors?: string[] } = {};
+          try { result = await res.json(); } catch { /* ignore parse error */ }
+
+          if (res.ok) {
+            zohoExported += result.exported ?? 0;
+            if (result.errors?.length) {
+              zohoFailed += result.errors.length;
+              console.warn(`Zoho export partial failure for property ${pId}:`, result.errors);
+            }
+          } else {
+            zohoFailed += visitorIds.length;
+            console.error(`Zoho export HTTP ${res.status} for property ${pId}`);
+          }
+        } catch (err) {
+          zohoFailed += visitorIds.length;
+          console.error(`Zoho export error for property ${pId}:`, err);
+        }
+      }
+    }
+  } catch (zohoQueueErr) {
+    console.error("run-scheduled-extraction: Zoho queue processing error", zohoQueueErr);
+  }
+
+  console.log(`run-scheduled-extraction: completed ${processed}/${convoList.length} extractions, SF: ${exported} exported / ${retried} retried / ${abandoned} abandoned, Zoho: ${zohoExported} exported / ${zohoFailed} failed`);
+
+  return new Response(JSON.stringify({ processed, total: convoList.length, exported, retried, abandoned, zohoExported, zohoFailed }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });

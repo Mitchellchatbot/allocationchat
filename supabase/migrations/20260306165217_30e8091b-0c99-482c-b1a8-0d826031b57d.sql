@@ -329,15 +329,21 @@ CREATE POLICY "Property owners can view page analytics"
   ));
 
 -- Video call signals
-DROP POLICY IF EXISTS "Property owners can view video signals" ON public.video_call_signals;
-CREATE POLICY "Property owners can view video signals"
-  ON public.video_call_signals FOR SELECT
-  USING (EXISTS (
-    SELECT 1 FROM public.conversations c
-    JOIN public.properties p ON p.id = c.property_id
-    WHERE c.id = video_call_signals.conversation_id
-    AND p.user_id IN (SELECT public.get_account_owner_ids(auth.uid()))
-  ));
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'video_call_signals') THEN
+    DROP POLICY IF EXISTS "Property owners can view video signals" ON public.video_call_signals;
+    EXECUTE $p$
+      CREATE POLICY "Property owners can view video signals"
+        ON public.video_call_signals FOR SELECT
+        USING (EXISTS (
+          SELECT 1 FROM public.conversations c
+          JOIN public.properties p ON p.id = c.property_id
+          WHERE c.id = video_call_signals.conversation_id
+          AND p.user_id IN (SELECT public.get_account_owner_ids(auth.uid()))
+        ))
+    $p$;
+  END IF;
+END $$;
 
 -- Data retention settings
 DROP POLICY IF EXISTS "Property owners can manage retention settings" ON public.data_retention_settings;

@@ -38,18 +38,17 @@ serve(async (req) => {
 
     console.log('Generating greeting for:', { companyName, businessType });
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a greeting writer for chat widgets. Generate a single, warm welcome message that:
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 100,
+        system: `You are a greeting writer for chat widgets. Generate a single, warm welcome message that:
 - Is 1-2 sentences maximum
 - Feels human and conversational, not corporate
 - Is welcoming but general enough to work for any visitor
@@ -67,15 +66,13 @@ Examples of good greetings:
 Do NOT write greetings like:
 - "Welcome to [company]! We offer X, Y, and Z services..." (too specific)
 - "Hi! Are you looking for treatment? Insurance? A consultation?" (too many questions)
-- "Hello and welcome! Our team of certified professionals..." (too corporate)`
-          },
+- "Hello and welcome! Our team of certified professionals..." (too corporate)`,
+        messages: [
           {
             role: 'user',
             content: `Generate a single greeting message for this business:\n\n${context}\n\nRespond with ONLY the greeting text, nothing else.`
           }
         ],
-        max_tokens: 100,
-        temperature: 0.7,
       }),
     });
 
@@ -89,7 +86,7 @@ Do NOT write greetings like:
     }
 
     const data = await response.json();
-    const greeting = data.choices?.[0]?.message?.content?.trim();
+    const greeting = data.content?.[0]?.text?.trim();
 
     if (!greeting) {
       return new Response(

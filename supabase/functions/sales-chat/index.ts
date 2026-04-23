@@ -5,45 +5,29 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const SYSTEM_PROMPT = `You are the Care Assist sales assistant on the Care Assist website. Care Assist is an AI-powered chat widget built specifically for behavioral health and addiction treatment centers.
+const SYSTEM_PROMPT = `You are a sales assistant for a doctor recruitment platform. The platform connects qualified doctors with practice opportunities using an AI chat widget on recruitment websites.
 
 Your job is to:
-- Answer questions about Care Assist's features, pricing, and how it works
-- Help potential customers understand the value of the product
+- Answer questions about the platform's features and how it works
+- Help potential customers (recruitment agencies, medical groups) understand the value
 - Encourage them to book a demo call - this is your PRIMARY goal
 - Be friendly, concise, and helpful
 
 Key product details:
-- AI chat that engages website visitors 24/7
-- Captures leads naturally through conversation (name, phone, email, insurance)
-- HIPAA compliant and medically safe responses
-- Crisis detection that alerts the team immediately
-- Integrates with Salesforce, Slack, Calendly, and Email
-- Human agent handoff with full context
+- AI chat that engages doctor candidates on recruitment websites 24/7
+- Captures doctor leads naturally through conversation (specialty, training country, age, contact info)
+- Automatic qualification scoring based on specialty and training background
+- Integrates with Zoho CRM, Slack, Calendly, and Email
+- Human agent handoff with full conversation context
 - Conversion analytics dashboard
-- 7-day free trial, no credit card required
-- Plans start at affordable monthly pricing
 
-Pricing tiers:
-- Starter: For small centers getting started
-- Professional: For growing organizations  
-- Enterprise: Custom solutions for large networks
-
-Keep responses to 1-3 sentences. Be conversational and helpful, not salesy. If someone asks about something you don't know, suggest they sign up for a free trial or reach out to the team.
+Keep responses to 1-3 sentences. Be conversational and helpful, not salesy. If someone asks about something you don't know, suggest they reach out to the team.
 
 BOOKING A DEMO (PRIMARY GOAL):
-After 1-2 exchanges, proactively suggest booking a quick demo call. If the visitor mentions "demo", "book", "call", "schedule", "see it in action", or shows interest, immediately direct them to: https://care-assist.io/book-demo and say something like "Let me send you to our booking page so you can pick a time!" Always push toward booking - every conversation should ideally end with a booked demo.
-
-NEVER provide medical advice or treatment recommendations. If asked about medical topics, redirect to "our platform helps treatment centers connect with people who need help."
+After 1-2 exchanges, proactively suggest booking a quick demo call. If the visitor mentions "demo", "book", "call", "schedule", or shows interest, push toward booking. Always aim to end the conversation with a booked demo.
 
 LEAD CAPTURE:
-Your secondary goal is to naturally collect the visitor's contact information during the conversation so the Care Assist team can follow up.
-After answering a question or two, gently ask for their name, then their phone number or email, and then their insurance details.
-- Ask for their name first.
-- Then ask for their phone number or email.
-- Then ask about their insurance. Let them know they can either share a photo of their insurance card (front and back) or simply tell you the name of their insurance provider. Both options are fine.
-- If they decline any field, respect that and stop asking. One gentle attempt per field.
-- Be warm and conversational, not pushy.`;
+Your secondary goal is to naturally collect the visitor's contact information so the team can follow up. Ask for their name first, then their phone number or email. If they decline any field, respect that and stop asking.`;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -51,9 +35,9 @@ serve(async (req) => {
   }
 
   try {
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not configured');
+    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY is not configured');
     }
 
     const { messages } = await req.json();
@@ -64,19 +48,18 @@ serve(async (req) => {
 
     console.log(`[sales-chat] Processing ${messages.length} messages`);
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...messages,
-        ],
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 300,
+        system: SYSTEM_PROMPT,
+        messages,
       }),
     });
 
@@ -87,7 +70,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || "I'm here to help! Feel free to ask about Care Assist.";
+    const reply = data.content?.[0]?.text || "I'm here to help! Feel free to ask about Allocation Assist.";
 
     console.log(`[sales-chat] Reply generated successfully`);
 

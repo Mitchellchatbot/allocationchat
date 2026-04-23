@@ -80,9 +80,9 @@ const widgetIconOptions = [
 ];
 
 const greetingPresets = [
-  { label: 'Hopeful', value: "You've taken a brave first step. We're here to help. How can we support you today?" },
-  { label: 'Caring', value: "We're so glad you reached out. You're not alone in this. How can we help?" },
-  { label: 'Encouraging', value: "Recovery is possible, and it starts with a conversation. What's on your mind?" },
+  { label: 'Friendly', value: "Hey there! We help connect doctors with great practice opportunities. What's your specialty?" },
+  { label: 'Professional', value: "Welcome! We're here to help you find your next role. What can we help you with today?" },
+  { label: 'Casual', value: "Hi! Looking for new opportunities? Tell us a bit about yourself and we'll see how we can help." },
 ];
 
 const defaultGreeting = greetingPresets[0].value;
@@ -265,7 +265,7 @@ const Onboarding = () => {
     websiteUrl: '',
     companyName: '',
     greeting: defaultGreeting,
-    greetingPreset: 'Hopeful',
+    greetingPreset: 'Friendly',
     collectEmail: false,
     collectName: true,
     collectPhone: true,

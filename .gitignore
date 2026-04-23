@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Env files — keep secrets out of git, set them in Railway/Supabase dashboards
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

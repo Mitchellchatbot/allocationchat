@@ -8,7 +8,7 @@ SELECT cron.schedule(
   '*/2 * * * *',
   $$
   SELECT net.http_post(
-    url     := 'https://qnafaecxrokafizyozpx.supabase.co/functions/v1/run-scheduled-extraction',
+    url     := 'https://oiigbvfzovhnuitprsjt.supabase.co/functions/v1/run-scheduled-extraction',
     headers := '{"Content-Type": "application/json"}'::jsonb,
     body    := '{}'::jsonb
   );

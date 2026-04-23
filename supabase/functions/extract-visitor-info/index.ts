@@ -5,26 +5,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const QUALIFIED_COUNTRIES = [
+  'europe', 'united kingdom', 'uk', 'united states', 'usa', 'us', 'america',
+  'canada', 'south africa', 'australia', 'new zealand', 'south america',
+];
+
 interface ExtractedInfo {
   name?: string;
   email?: string;
   phone?: string;
   age?: string;
-  date_of_birth?: string;
-  occupation?: string;
-  addiction_history?: string;
-  drug_of_choice?: string;
-  treatment_interest?: string;
-  insurance_company?: string;
-  member_id?: string;
-  insurance_info?: string;
-  urgency_level?: string;
+  specialty?: string;
+  country_of_training?: string;
 }
 
 const EXTRACT_FIELDS: (keyof ExtractedInfo)[] = [
-  'name', 'email', 'phone', 'age', 'date_of_birth', 'occupation',
-  'addiction_history', 'drug_of_choice', 'treatment_interest',
-  'insurance_company', 'member_id', 'insurance_info', 'urgency_level',
+  'name', 'email', 'phone', 'age', 'specialty', 'country_of_training',
 ];
 
 const isPlaceholder = (val?: string | null): boolean => {
@@ -38,8 +34,17 @@ const cleanValue = (val?: string): string | undefined => {
   return val;
 };
 
+function isQualified(visitor: Record<string, string | null>): boolean {
+  const country = (visitor.country_of_training || '').toLowerCase();
+  const countryOk = QUALIFIED_COUNTRIES.some(c => country.includes(c));
+  if (!countryOk) return false;
 
-/** Fire-and-forget: send phone/email notifications for newly captured phone */
+  const age = parseInt(visitor.age || '');
+  if (isNaN(age) || age < 30 || age > 60) return false;
+
+  return true;
+}
+
 function dispatchPhoneNotifications(
   supabase: ReturnType<typeof createClient>,
   propertyId: string,
@@ -65,28 +70,6 @@ function dispatchPhoneNotifications(
   );
 }
 
-/** Fire-and-forget: send Google Chat notification when insurance info is captured */
-function dispatchInsuranceNotification(
-  supabase: ReturnType<typeof createClient>,
-  propertyId: string,
-  conversationId: string,
-  visitorName: string | null,
-) {
-  const payload = {
-    propertyId,
-    eventType: 'insurance_submission',
-    visitorName,
-    conversationId,
-  };
-  supabase.functions.invoke('send-google-chat-notification', { body: payload }).catch((e: any) =>
-    console.error('Insurance Google Chat notification error:', e)
-  );
-}
-
-
-
-// ── Main handler ─────────────────────────────────────────────────────────
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -94,11 +77,11 @@ Deno.serve(async (req) => {
 
   try {
     const { visitorId, conversationHistory } = await req.json();
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not configured');
+    if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured');
 
     if (!visitorId || !conversationHistory || conversationHistory.length === 0) {
       return new Response(JSON.stringify({ extracted: false }), {
@@ -108,10 +91,9 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get current visitor data
     const { data: visitor } = await supabase
       .from('visitors')
-      .select('name, email, phone, age, date_of_birth, occupation, addiction_history, drug_of_choice, treatment_interest, insurance_company, member_id, insurance_info, urgency_level')
+      .select('name, email, phone, age, specialty, country_of_training')
       .eq('id', visitorId)
       .single();
 
@@ -119,57 +101,45 @@ Deno.serve(async (req) => {
       .map((msg: { role: string; content: string }) => `${msg.role}: ${msg.content}`)
       .join('\n');
 
-    // ── AI extraction with 20s timeout ───────────────────────────────────
     const aiController = new AbortController();
     const aiTimeout = setTimeout(() => aiController.abort(), 20000);
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 512,
+        system: `You are an information extraction assistant. Analyze the conversation and extract any personal information the doctor has shared naturally. Only extract information that was explicitly stated by the user (doctor messages), not inferred. If information is not clearly stated, do NOT include it — leave the field out entirely. Never return placeholder values like "N/A", "none", "unknown", or empty strings.`,
         messages: [
           {
-            role: 'system',
-            content: `You are an information extraction assistant. Analyze the conversation and extract any personal information the visitor has shared naturally. Only extract information that was explicitly stated by the visitor (user messages), not inferred. If information is not clearly stated, do NOT include it — leave the field out entirely. Never return placeholder values like "N/A", "none", "unknown", or empty strings.`
-          },
-          {
             role: 'user',
-            content: `Extract any personal information from this conversation:\n\n${conversationText}`
-          }
+            content: `Extract any personal information from this conversation:\n\n${conversationText}`,
+          },
         ],
         tools: [
           {
-            type: 'function',
-            function: {
-              name: 'extract_visitor_info',
-              description: 'Extract personal information from the conversation',
-              parameters: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string', description: "The visitor's name if they mentioned it" },
-                  email: { type: 'string', description: "The visitor's email address if they shared it" },
-                  phone: { type: 'string', description: "The visitor's phone number if they shared it" },
-                  age: { type: 'string', description: "The visitor's age or age range if mentioned" },
-                  date_of_birth: { type: 'string', description: "The visitor's date of birth or birthday if mentioned (any format)" },
-                  occupation: { type: 'string', description: "The visitor's job, profession, or occupation if mentioned" },
-                  addiction_history: { type: 'string', description: 'Any mention of past or current substance use, addiction history, how long they have been struggling, or relapse history' },
-                  drug_of_choice: { type: 'string', description: 'Specific substances mentioned like alcohol, opioids, heroin, fentanyl, meth, cocaine, prescription pills, benzodiazepines, marijuana, etc.' },
-                  treatment_interest: { type: 'string', description: 'What type of treatment they are seeking: inpatient, outpatient, detox, residential, PHP, IOP, therapy, counseling, rehab' },
-                  insurance_company: { type: 'string', description: 'The name of the insurance company or provider mentioned (Blue Cross, Aetna, Cigna, UnitedHealthcare, Humana, Medicaid, Medicare, etc.)' },
-                  member_id: { type: 'string', description: 'Insurance member ID, policy number, or subscriber ID if mentioned' },
-                  insurance_info: { type: 'string', description: 'Any other insurance-related info like plan type, self-pay, or concerns about payment/cost that does not fit into insurance_company or member_id' },
-                  urgency_level: { type: 'string', description: 'How urgent their situation is: crisis/immediate need, ready to start treatment, planning for near future, or just researching options' },
-                },
-                additionalProperties: false,
+            name: 'extract_visitor_info',
+            description: 'Extract personal information from the conversation',
+            input_schema: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: "The doctor's full name if they mentioned it" },
+                email: { type: 'string', description: "The doctor's email address if they shared it" },
+                phone: { type: 'string', description: "The doctor's phone number if they shared it" },
+                age: { type: 'string', description: "The doctor's age if mentioned" },
+                specialty: { type: 'string', description: "The doctor's medical specialty (e.g. Cardiology, Radiology, General Practice, Surgery)" },
+                country_of_training: { type: 'string', description: "The country where the doctor completed their medical training" },
               },
+              additionalProperties: false,
             },
           },
         ],
-        tool_choice: { type: 'function', function: { name: 'extract_visitor_info' } },
+        tool_choice: { type: 'tool', name: 'extract_visitor_info' },
       }),
       signal: aiController.signal,
     });
@@ -183,9 +153,10 @@ Deno.serve(async (req) => {
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    // Anthropic tool use: content array contains a block with type "tool_use"
+    const toolUse = data.content?.find((b: { type: string }) => b.type === 'tool_use');
 
-    if (!toolCall) {
+    if (!toolUse) {
       return new Response(JSON.stringify({ extracted: false }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -193,14 +164,13 @@ Deno.serve(async (req) => {
 
     let extractedInfo: ExtractedInfo;
     try {
-      extractedInfo = JSON.parse(toolCall.function.arguments);
+      extractedInfo = toolUse.input as ExtractedInfo;
     } catch {
       return new Response(JSON.stringify({ extracted: false }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // ── Diff: only update fields that are newly extracted ────────────────
     const updates: Partial<ExtractedInfo> = {};
     for (const field of EXTRACT_FIELDS) {
       const extracted = cleanValue(extractedInfo[field]);
@@ -218,100 +188,59 @@ Deno.serve(async (req) => {
 
     console.log('Updating visitor with extracted info:', updates);
 
-    const { error } = await supabase
+    const { error: updateError } = await supabase
       .from('visitors')
       .update(updates)
       .eq('id', visitorId);
 
-    if (error) {
-      console.error('Error updating visitor:', error);
+    if (updateError) {
+      console.error('Error updating visitor:', updateError);
     }
 
-    // ── Side-effects: notifications & Salesforce (deferred export) ──
-    const needsNotifications = updates.phone;
-    const hasNewInsuranceField = updates.insurance_info || updates.insurance_company || updates.member_id || updates.date_of_birth;
-    const needsSideEffects = needsNotifications || updates.phone || hasNewInsuranceField;
+    // Recompute qualification using merged data
+    const merged = { ...visitor, ...updates } as Record<string, string | null>;
+    const hasQualFields = !isPlaceholder(merged.country_of_training) && !isPlaceholder(merged.age);
 
-    if (needsSideEffects) {
+    if (hasQualFields) {
+      const qualified = isQualified(merged);
+      await supabase.from('visitors').update({ qualified }).eq('id', visitorId);
+      console.log(`Visitor ${visitorId} qualified: ${qualified}`);
+    }
+
+    // Side effects: notifications + Zoho export queue (triggered when phone is captured)
+    if (updates.phone) {
       try {
         const { data: conv } = await supabase
           .from('conversations')
-          .select('id, property_id')
+          .select('id, property_id, is_test')
           .eq('visitor_id', visitorId)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
 
-        if (conv) {
-          // Phone notifications (still immediate)
-          if (updates.phone) {
-            dispatchPhoneNotifications(supabase, conv.property_id, conv.id, updates.name || visitor?.name || null, updates.phone);
-          }
+        // Why: test conversations come from widget preview — firing real notifications
+        // or enqueueing Zoho exports for preview chats would spam property owners and
+        // push fake leads into their CRM.
+        if (conv && !conv.is_test) {
+          dispatchPhoneNotifications(supabase, conv.property_id, conv.id, updates.name || visitor?.name || null, updates.phone);
 
-          // Determine which SF export trigger to flag (deferred, not immediate)
-          let exportTrigger: string | null = null;
+          // Enqueue Zoho export — zoho-export-leads will skip unqualified leads
+          const { error: qErr } = await supabase
+            .from('zoho_export_queue')
+            .insert({
+              property_id: conv.property_id,
+              visitor_id: visitorId,
+              conversation_id: conv.id,
+              trigger_type: 'phone',
+              status: 'pending',
+              next_attempt_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+              updated_at: new Date().toISOString(),
+            });
 
-          if (updates.phone) {
-            exportTrigger = 'phone';
-          }
-
-          if (hasNewInsuranceField) {
-            const merged = { ...visitor, ...updates };
-            const { data: prop } = await supabase
-              .from('properties')
-              .select('ai_collect_insurance_company, ai_collect_member_id, ai_collect_date_of_birth, ai_insurance_collection_enabled')
-              .eq('id', conv.property_id)
-              .single();
-
-            let insuranceComplete = true;
-            if (prop?.ai_insurance_collection_enabled) {
-              if (prop.ai_collect_insurance_company && isPlaceholder(merged.insurance_company)) insuranceComplete = false;
-              if (prop.ai_collect_member_id && isPlaceholder(merged.member_id)) insuranceComplete = false;
-              if (prop.ai_collect_date_of_birth && isPlaceholder(merged.date_of_birth)) insuranceComplete = false;
-              console.log('Insurance completeness check:', {
-                insuranceComplete,
-                insurance_company: !!merged.insurance_company,
-                member_id: !!merged.member_id,
-                date_of_birth: !!merged.date_of_birth,
-              });
-            }
-
-            if (insuranceComplete) {
-              exportTrigger = 'insurance';
-              dispatchInsuranceNotification(supabase, conv.property_id, conv.id, updates.name || visitor?.name || null);
-            } else {
-              console.log('Skipping insurance export flag, not all required fields collected yet');
-            }
-          }
-
-          // Flag the conversation for deferred export (5 min after last visitor message)
-          // AND write to the persistent export queue immediately as a failsafe.
-          if (exportTrigger) {
-            console.log(`Flagging conversation ${conv.id} for deferred SF export (trigger: ${exportTrigger})`);
-            await supabase
-              .from('conversations')
-              .update({ sf_export_ready_at: new Date().toISOString(), sf_export_trigger: exportTrigger })
-              .eq('id', conv.id);
-
-            // Belt-and-suspenders: enqueue directly so the lead is never lost even
-            // if the flag is cleared before the cron picks it up.
-            // Plain insert — partial unique index prevents ON CONFLICT upsert syntax.
-            // 23505 = duplicate key (already queued and active), which is fine to ignore.
-            const { error: qErr } = await supabase
-              .from('salesforce_export_queue')
-              .insert({
-                property_id: conv.property_id,
-                visitor_id: visitorId,
-                conversation_id: conv.id,
-                trigger_type: exportTrigger,
-                status: 'pending',
-                next_attempt_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-                updated_at: new Date().toISOString(),
-              });
-
-            if (qErr && (qErr as any).code !== '23505') console.error('Failed to enqueue SF export:', qErr);
-            else if (!qErr) console.log(`Enqueued SF export for visitor ${visitorId} trigger=${exportTrigger}`);
-          }
+          if (qErr && (qErr as any).code !== '23505') console.error('Failed to enqueue Zoho export:', qErr);
+          else if (!qErr) console.log(`Enqueued Zoho export for visitor ${visitorId}`);
+        } else if (conv?.is_test) {
+          console.log(`Skipping phone side-effects for test conversation ${conv.id}`);
         }
       } catch (sideEffectErr) {
         console.error('Error in side-effects:', sideEffectErr);

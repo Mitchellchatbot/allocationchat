@@ -4,7 +4,7 @@ SELECT cron.schedule(
   '0 10 * * *',
   $$
   SELECT net.http_post(
-    url     := 'https://qnafaecxrokafizyozpx.supabase.co/functions/v1/send-payment-reminders',
+    url     := 'https://oiigbvfzovhnuitprsjt.supabase.co/functions/v1/send-payment-reminders',
     headers := '{"Content-Type": "application/json", "apikey": "sb_publishable_EN4ugxUcJl4BgCqiFpLGPw_2sVInkx_"}'::jsonb,
     body    := '{}'::jsonb
   );

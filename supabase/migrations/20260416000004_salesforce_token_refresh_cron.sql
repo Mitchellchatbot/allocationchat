@@ -6,7 +6,7 @@ SELECT cron.schedule(
   '*/30 * * * *',
   $$
   SELECT net.http_post(
-    url     := 'https://qnafaecxrokafizyozpx.supabase.co/functions/v1/refresh-salesforce-tokens',
+    url     := 'https://oiigbvfzovhnuitprsjt.supabase.co/functions/v1/refresh-salesforce-tokens',
     headers := '{"Content-Type": "application/json", "apikey": "sb_publishable_EN4ugxUcJl4BgCqiFpLGPw_2sVInkx_"}'::jsonb,
     body    := '{}'::jsonb
   );

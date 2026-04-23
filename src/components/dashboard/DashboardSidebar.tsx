@@ -1,23 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { 
+import {
   MessageSquare,
-  Users, 
-  BarChart3, 
-  Code, 
+  Users,
+  BarChart3,
+  Code,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Inbox,
   Archive,
-  
   LifeBuoy,
   Bot,
-  BookOpen,
-  CreditCard,
   Building2,
-  Menu,
   Shield,
   Settings
 } from 'lucide-react';
@@ -30,10 +26,8 @@ import { useSidebarState } from '@/hooks/useSidebarState';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 
-import salesforceLogo from '@/assets/logos/salesforce.svg';
+import zohoLogo from '@/assets/logos/zoho.svg';
 import gmailLogo from '@/assets/logos/gmail.svg';
-import careAssistLogo from '@/assets/care-assist-icon.png';
-import subscriptionCardLogo from '@/assets/logos/subscription-card.svg';
 import { UserAvatarUpload } from '@/components/sidebar/UserAvatarUpload';
 import { WorkspaceSwitcher } from '@/components/sidebar/WorkspaceSwitcher';
 import {
@@ -201,12 +195,11 @@ export const DashboardSidebar = ({
           )}
         >
           {(!forMobile && collapsed) ? (
-            <img src={careAssistLogo} alt="Care Assist" className="w-10 h-10 rounded-xl object-contain" />
+            <span className="font-bold text-lg text-sidebar-primary">A</span>
           ) : (
-            <div className="flex items-center gap-2">
-              <img src={careAssistLogo} alt="Care Assist" className="w-8 h-8 rounded-lg object-contain" />
-              <span className="font-bold text-lg text-sidebar-foreground">Care Assist</span>
-            </div>
+            <span className="font-bold text-lg text-sidebar-foreground">
+              Allocation <span className="text-sidebar-primary">Assist</span>
+            </span>
           )}
           {!forMobile && !collapsed && (
             <Tooltip delayDuration={0}>
@@ -343,7 +336,7 @@ export const DashboardSidebar = ({
           {showAdminItems && (
             <SidebarSection title="Manage" collapsed={!forMobile && collapsed}>
               <div data-tour="team-members">
-                <SidebarItem to="/dashboard/team" icon={Users} label="Team Members" collapsed={!forMobile && collapsed} iconColor="#8B5CF6" />
+                <SidebarItem to="/dashboard/team" icon={Users} label="Team Members" collapsed={!forMobile && collapsed} iconColor="#22C55E" />
               </div>
               <div data-tour="properties-sidebar">
                 <SidebarItem to="/dashboard/properties" icon={Building2} label="Business Info" collapsed={!forMobile && collapsed} iconColor="#F97316" />
@@ -367,8 +360,8 @@ export const DashboardSidebar = ({
 
           {showAdminItems && (
             <SidebarSection title="Integrations" collapsed={!forMobile && collapsed}>
-              <div data-tour="salesforce">
-                <SidebarItem to="/dashboard/salesforce" icon={({ className }: { className?: string }) => <img src={salesforceLogo} alt="Salesforce" className={cn("h-[18px] w-[18px]", className)} />} label="Salesforce" collapsed={!forMobile && collapsed} iconColor="#00A1E0" />
+              <div data-tour="zoho">
+                <SidebarItem to="/dashboard/zoho" icon={({ className }: { className?: string }) => <img src={zohoLogo} alt="Zoho" className={cn("h-[18px] w-[18px]", className)} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />} label="Zoho CRM" collapsed={!forMobile && collapsed} iconColor="#E42527" />
               </div>
               <div data-tour="notifications">
                 <SidebarItem to="/dashboard/notifications" icon={({ className }: { className?: string }) => <img src={gmailLogo} alt="Notifications" className={cn("h-[18px] w-[18px]", className)} />} label="Notifications" collapsed={!forMobile && collapsed} iconColor="#EA4335" />
@@ -377,14 +370,7 @@ export const DashboardSidebar = ({
           )}
 
           {showAdminItems && (
-            <SidebarSection title="Compliance" collapsed={!forMobile && collapsed}>
-              <SidebarItem to="/dashboard/hipaa" icon={Shield} label="HIPAA" collapsed={!forMobile && collapsed} iconColor="#10B981" />
-            </SidebarSection>
-          )}
-
-          {showAdminItems && (
           <SidebarSection title="Account" collapsed={!forMobile && collapsed}>
-              <SidebarItem to="/dashboard/subscription" icon={({ className }: { className?: string }) => <img src={subscriptionCardLogo} alt="Subscription" className={cn("h-[18px] w-[18px]", className)} />} label="Subscription" collapsed={!forMobile && collapsed} iconColor="#F97316" />
               <SidebarItem to="/dashboard/account" icon={Settings} label="Account Settings" collapsed={!forMobile && collapsed} iconColor="#6B7280" />
             </SidebarSection>
           )}
@@ -394,7 +380,6 @@ export const DashboardSidebar = ({
               <div data-tour="get-help">
                 <SidebarItem to="/dashboard/support" icon={LifeBuoy} label="Get Help" collapsed={!forMobile && collapsed} iconColor="#EF4444" />
               </div>
-              <SidebarItem to="/documentation" icon={BookOpen} label="Documentation" collapsed={!forMobile && collapsed} iconColor="#14B8A6" />
             </SidebarSection>
           )}
 

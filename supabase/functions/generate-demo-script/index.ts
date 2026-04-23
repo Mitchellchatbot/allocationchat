@@ -7,59 +7,48 @@ const corsHeaders = {
 };
 
 const FALLBACK = [
-  "Hi, my name is Sarah",
-  "My brother has been struggling with alcohol and we're not sure where to start",
+  "Hi, I'm a cardiologist looking at new opportunities",
+  "I trained in the UK and I'm open to relocating",
 ];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) {
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
       return new Response(JSON.stringify({ lines: FALLBACK }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `You generate realistic demo visitor messages for a substance abuse treatment center chat widget. Return exactly 2 short messages. The first introduces themselves with a first name. The second briefly describes a loved one's struggle with a substance. Keep each under 15 words. Be natural and varied - different names, substances, relationships, and situations each time. Examples of substances: alcohol, opioids, pills, heroin, meth, cocaine, fentanyl. Examples of relationships: brother, sister, son, daughter, husband, wife, mom, dad, friend.`,
-          },
-          { role: "user", content: "Generate 2 demo visitor messages." },
-        ],
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 256,
+        system: `You generate realistic demo visitor messages for a doctor recruitment chat widget. Return exactly 2 short messages. The first introduces the doctor with a first name and their medical specialty. The second briefly mentions their training background or what they're looking for. Keep each under 15 words. Be natural and varied - different names, specialties, and training countries each time. Examples of specialties: Cardiology, Radiology, General Practice, Emergency Medicine, Orthopaedic Surgery, Paediatrics, Psychiatry, Anaesthetics. Examples of training countries: UK, Australia, South Africa, Canada, New Zealand, USA.`,
+        messages: [{ role: "user", content: "Generate 2 demo visitor messages." }],
         tools: [
           {
-            type: "function",
-            function: {
-              name: "return_demo_lines",
-              description: "Return demo visitor chat lines",
-              parameters: {
-                type: "object",
-                properties: {
-                  lines: {
-                    type: "array",
-                    items: { type: "string" },
-                    minItems: 2,
-                    maxItems: 2,
-                  },
-                },
-                required: ["lines"],
-                additionalProperties: false,
+            name: "return_demo_lines",
+            description: "Return demo visitor chat lines",
+            input_schema: {
+              type: "object",
+              properties: {
+                lines: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 2 },
               },
+              required: ["lines"],
+              additionalProperties: false,
             },
           },
         ],
-        tool_choice: { type: "function", function: { name: "return_demo_lines" } },
+        tool_choice: { type: "tool", name: "return_demo_lines" },
       }),
     });
 
@@ -71,14 +60,11 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall) {
-      const args = JSON.parse(toolCall.function.arguments);
-      if (Array.isArray(args.lines) && args.lines.length >= 2) {
-        return new Response(JSON.stringify({ lines: args.lines.slice(0, 2) }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    const toolUse = data.content?.find((b: { type: string }) => b.type === "tool_use");
+    if (toolUse && Array.isArray(toolUse.input?.lines) && toolUse.input.lines.length >= 2) {
+      return new Response(JSON.stringify({ lines: toolUse.input.lines.slice(0, 2) }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(JSON.stringify({ lines: FALLBACK }), {

@@ -5,7 +5,11 @@
 -- 1. Drop overly permissive policies
 DROP POLICY IF EXISTS "Anyone can update visitors" ON public.visitors;
 DROP POLICY IF EXISTS "Anyone can create messages" ON public.messages;
-DROP POLICY IF EXISTS "Users can read signals for their conversations" ON public.video_call_signals;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'video_call_signals') THEN
+    DROP POLICY IF EXISTS "Users can read signals for their conversations" ON public.video_call_signals;
+  END IF;
+END $$;
 
 -- 2. Create a helper function to validate property exists (for widget inserts)
 CREATE OR REPLACE FUNCTION public.property_exists(property_uuid uuid)
@@ -98,31 +102,35 @@ WITH CHECK (EXISTS (
 ));
 
 -- 8. Tighten video_call_signals - require valid conversation and restrict SELECT
-DROP POLICY IF EXISTS "Users can insert signals" ON public.video_call_signals;
-
-CREATE POLICY "Anyone can insert signals for valid conversations"
-ON public.video_call_signals
-FOR INSERT
-WITH CHECK (public.conversation_exists(conversation_id));
-
-CREATE POLICY "Property owners can view video signals"
-ON public.video_call_signals
-FOR SELECT
-USING (EXISTS (
-  SELECT 1 FROM conversations c
-  JOIN properties p ON p.id = c.property_id
-  WHERE c.id = video_call_signals.conversation_id AND p.user_id = auth.uid()
-));
-
-CREATE POLICY "Assigned agents can view video signals"
-ON public.video_call_signals
-FOR SELECT
-USING (EXISTS (
-  SELECT 1 FROM conversations c
-  JOIN property_agents pa ON pa.property_id = c.property_id
-  JOIN agents a ON a.id = pa.agent_id
-  WHERE c.id = video_call_signals.conversation_id AND a.user_id = auth.uid()
-));
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'video_call_signals') THEN
+    DROP POLICY IF EXISTS "Users can insert signals" ON public.video_call_signals;
+    EXECUTE $p$
+      CREATE POLICY "Anyone can insert signals for valid conversations"
+      ON public.video_call_signals FOR INSERT
+      WITH CHECK (public.conversation_exists(conversation_id))
+    $p$;
+    EXECUTE $p$
+      CREATE POLICY "Property owners can view video signals"
+      ON public.video_call_signals FOR SELECT
+      USING (EXISTS (
+        SELECT 1 FROM conversations c
+        JOIN properties p ON p.id = c.property_id
+        WHERE c.id = video_call_signals.conversation_id AND p.user_id = auth.uid()
+      ))
+    $p$;
+    EXECUTE $p$
+      CREATE POLICY "Assigned agents can view video signals"
+      ON public.video_call_signals FOR SELECT
+      USING (EXISTS (
+        SELECT 1 FROM conversations c
+        JOIN property_agents pa ON pa.property_id = c.property_id
+        JOIN agents a ON a.id = pa.agent_id
+        WHERE c.id = video_call_signals.conversation_id AND a.user_id = auth.uid()
+      ))
+    $p$;
+  END IF;
+END $$;
 
 -- 9. Tighten page_analytics_events - require valid property
 DROP POLICY IF EXISTS "Anyone can insert page analytics events" ON public.page_analytics_events;

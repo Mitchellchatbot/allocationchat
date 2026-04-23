@@ -233,7 +233,6 @@ Deno.serve(async (req) => {
       require_email_before_chat: property.require_email_before_chat,
       require_name_before_chat: property.require_name_before_chat,
       require_phone_before_chat: property.require_phone_before_chat,
-      require_insurance_card_before_chat: property.require_insurance_card_before_chat,
       natural_lead_capture_enabled: property.natural_lead_capture_enabled,
       proactive_message_enabled: property.proactive_message_enabled,
       proactive_message: property.proactive_message,
@@ -252,7 +251,6 @@ Deno.serve(async (req) => {
       business_hours: property.business_hours,
       business_description: property.business_description,
       name: property.name,
-      insurance_collection_prompt: property.insurance_collection_prompt,
     };
 
     return new Response(JSON.stringify({

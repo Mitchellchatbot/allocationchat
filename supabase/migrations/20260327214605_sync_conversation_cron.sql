@@ -8,7 +8,7 @@ SELECT cron.schedule(
   '0 * * * *',  -- every hour on the hour
   $$
   SELECT net.http_post(
-    url    := 'https://qnafaecxrokafizyozpx.supabase.co/functions/v1/sync-conversation-data',
+    url    := 'https://oiigbvfzovhnuitprsjt.supabase.co/functions/v1/sync-conversation-data',
     headers := '{"Content-Type": "application/json"}'::jsonb,
     body    := '{}'::jsonb
   );

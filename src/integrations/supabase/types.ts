@@ -1171,76 +1171,55 @@ export type Database = {
       }
       visitors: {
         Row: {
-          addiction_history: string | null
           age: string | null
           browser_info: string | null
+          country_of_training: string | null
           created_at: string
           current_page: string | null
-          date_of_birth: string | null
-          drug_of_choice: string | null
           email: string | null
           gclid: string | null
           id: string
-          insurance_card_url: string | null
-          insurance_company: string | null
-          insurance_info: string | null
           location: string | null
-          member_id: string | null
           name: string | null
-          occupation: string | null
           phone: string | null
           property_id: string
+          qualified: boolean | null
           session_id: string
-          treatment_interest: string | null
-          urgency_level: string | null
+          specialty: string | null
         }
         Insert: {
-          addiction_history?: string | null
           age?: string | null
           browser_info?: string | null
+          country_of_training?: string | null
           created_at?: string
           current_page?: string | null
-          date_of_birth?: string | null
-          drug_of_choice?: string | null
           email?: string | null
           gclid?: string | null
           id?: string
-          insurance_card_url?: string | null
-          insurance_company?: string | null
-          insurance_info?: string | null
           location?: string | null
-          member_id?: string | null
           name?: string | null
-          occupation?: string | null
           phone?: string | null
           property_id: string
+          qualified?: boolean | null
           session_id: string
-          treatment_interest?: string | null
-          urgency_level?: string | null
+          specialty?: string | null
         }
         Update: {
-          addiction_history?: string | null
           age?: string | null
           browser_info?: string | null
+          country_of_training?: string | null
           created_at?: string
           current_page?: string | null
-          date_of_birth?: string | null
-          drug_of_choice?: string | null
           email?: string | null
           gclid?: string | null
           id?: string
-          insurance_card_url?: string | null
-          insurance_company?: string | null
-          insurance_info?: string | null
           location?: string | null
-          member_id?: string | null
           name?: string | null
-          occupation?: string | null
           phone?: string | null
           property_id?: string
+          qualified?: boolean | null
           session_id?: string
-          treatment_interest?: string | null
-          urgency_level?: string | null
+          specialty?: string | null
         }
         Relationships: [
           {

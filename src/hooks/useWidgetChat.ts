@@ -1725,8 +1725,9 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
       }
     }
 
-    // Visitor info extraction is now handled server-side in widget-save-message
-    // (only for visitor messages, with debouncing). No client-side call needed.
+    // Visitor info extraction runs server-side via the run-scheduled-extraction
+    // cron, which picks up conversations by last_visitor_message_at. Real embeds
+    // stamp that field inside widget-save-message; preview stamps it below.
 
     // NOTE: For real embeds the visitor message was already saved to DB at the top of sendMessage
     // (awaited, before the hybrid flow). For preview mode with a test conversation, save via
@@ -1751,7 +1752,13 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
       });
       if (msgErr) console.error('Error saving visitor message (preview):', msgErr);
 
-      // Visitor info extraction is handled server-side in widget-save-message
+      // Why: cron picks up conversations by last_visitor_message_at. Stamping it
+      // here lets extraction run for test conversations too.
+      const { error: convUpdateErr } = await supabase
+        .from('conversations')
+        .update({ last_visitor_message_at: new Date().toISOString() })
+        .eq('id', conversationId);
+      if (convUpdateErr) console.error('Error stamping last_visitor_message_at (preview):', convUpdateErr);
     }
   };
 

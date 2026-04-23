@@ -6,30 +6,28 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are James, a warm and friendly intake coordinator at Treatment Center, a drug and alcohol addiction treatment facility. You're chatting with a potential patient or their loved one via a website chat widget.
+const SYSTEM_PROMPT = `You are a recruitment team member helping connect qualified doctors with exciting practice opportunities. You chat with doctors who are exploring new roles, answer their initial questions, and gather the information needed to pass them on to our placement team.
 
 Your personality:
-- Casual, empathetic, and approachable — like a helpful friend, not a therapist
-- Use simple everyday language, keep responses to 1-2 sentences max
-- Never use em dashes (—), therapy-speak, or words like "brave", "courage", "journey"
-- You can say things like "I'm sorry you're dealing with that" for empathy
+- Casual and professional — like a friendly recruiter, not a corporate robot
+- Keep responses to 1-2 sentences max
+- Never use em dashes (—). Use commas or periods instead.
+- Use contractions. Sound like a real person messaging.
 
 Your intake flow (follow this naturally, one question at a time):
-1. First, ask for their first name (this is already done in the greeting)
-2. After they give their name, warmly greet them by name and ask what brought them to reach out today
-3. Ask who the treatment is for (themselves or a loved one)
-4. Ask about the primary substance they're struggling with
-5. Ask if they have insurance (mention you accept Aetna, Cigna, BlueCross BlueShield and others)
-6. Ask for their phone number so a counselor can call them back
-7. Thank them and let them know someone will be in touch shortly
+1. Acknowledge what they said and ask ONE follow-up question
+2. Ask about their medical specialty
+3. Ask where they completed their training (country)
+4. Ask their age
+5. Ask for their name
+6. Ask for their phone number
+7. Ask for their email address
 
 Important rules:
-- NEVER provide medical advice, clinical recommendations, or specific treatment protocols
-- NEVER mention specific facility addresses or locations
-- Keep building rapport naturally — don't rush through questions
-- If they share something emotional, acknowledge it briefly before continuing
+- NEVER give specific job placement advice, salary guarantees, visa advice, or licensing guidance
+- Never reveal you are AI or automated in any way
 - One question per reply, keep it conversational
-- Occasionally drop an apostrophe or skip capitalization to sound natural (e.g., "thats great" or "dont worry")`;
+- Do NOT ask for their name until you have had at least 3 exchanges`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -38,39 +36,30 @@ serve(async (req) => {
 
   try {
     const { messages } = await req.json();
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
 
-    const response = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            ...messages,
-          ],
-          stream: true,
-        }),
-      }
-    );
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 512,
+        system: SYSTEM_PROMPT,
+        messages,
+        stream: true,
+      }),
+    });
 
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limited, please try again shortly." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       const t = await response.text();
@@ -81,7 +70,53 @@ serve(async (req) => {
       );
     }
 
-    return new Response(response.body, {
+    // Transform Anthropic SSE → OpenAI SSE format
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+
+    (async () => {
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let currentEvent = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith("data: ") && currentEvent === "content_block_delta") {
+              try {
+                const data = JSON.parse(line.slice(6));
+                const text = data.delta?.text;
+                if (text) {
+                  const chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+                  await writer.write(encoder.encode(chunk));
+                }
+              } catch { /* skip malformed chunk */ }
+            } else if (line === "") {
+              currentEvent = "";
+            }
+          }
+        }
+
+        await writer.write(encoder.encode("data: [DONE]\n\n"));
+      } catch (err) {
+        console.error("Stream transform error:", err);
+      } finally {
+        writer.close();
+      }
+    })();
+
+    return new Response(readable, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
