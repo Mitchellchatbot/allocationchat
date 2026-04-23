@@ -28,6 +28,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 import zohoLogo from '@/assets/logos/zoho.svg';
 import gmailLogo from '@/assets/logos/gmail.svg';
+import allocationAssistLogo from '@/assets/allocation-assist-logo.png';
 import { UserAvatarUpload } from '@/components/sidebar/UserAvatarUpload';
 import { WorkspaceSwitcher } from '@/components/sidebar/WorkspaceSwitcher';
 import {
@@ -195,11 +196,14 @@ export const DashboardSidebar = ({
           )}
         >
           {(!forMobile && collapsed) ? (
-            <span className="font-bold text-lg text-sidebar-primary">A</span>
+            <img src={allocationAssistLogo} alt="Allocation Assist" className="h-8 w-8" />
           ) : (
-            <span className="font-bold text-lg text-sidebar-foreground">
-              Allocation <span className="text-sidebar-primary">Assist</span>
-            </span>
+            <div className="flex items-center gap-2">
+              <img src={allocationAssistLogo} alt="Allocation Assist" className="h-8 w-8" />
+              <span className="font-bold text-lg text-sidebar-foreground">
+                Allocation <span className="text-sidebar-primary">Assist</span>
+              </span>
+            </div>
           )}
           {!forMobile && !collapsed && (
             <Tooltip delayDuration={0}>
