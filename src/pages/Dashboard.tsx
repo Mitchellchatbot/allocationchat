@@ -140,8 +140,8 @@ const DashboardContent = () => {
 
   useEffect(() => {
     requestNotificationPermission();
-    document.title = 'Care Assist';
-    return () => { document.title = 'Care Assist'; };
+    document.title = 'Allocation Assist';
+    return () => { document.title = 'Allocation Assist'; };
   }, []);
 
   // Redirect to onboarding if no properties - only after BOTH auth and data have fully loaded

@@ -86,8 +86,8 @@ export default function AgentDashboard() {
   // Request browser notification permission and reset page title on mount
   useEffect(() => {
     requestNotificationPermission();
-    document.title = 'Care Assist';
-    return () => { document.title = 'Care Assist'; };
+    document.title = 'Allocation Assist';
+    return () => { document.title = 'Allocation Assist'; };
   }, []);
 
   // Fetch agent profile and assigned properties

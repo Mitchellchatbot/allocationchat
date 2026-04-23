@@ -5,7 +5,7 @@ import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { toast } from 'sonner';
 
 const ALERT_TYPES = new Set(['new_chat', 'escalation']);
-const DEFAULT_TITLE = 'Care Assist';
+const DEFAULT_TITLE = 'Allocation Assist';
 
 export function requestNotificationPermission() {
   if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
