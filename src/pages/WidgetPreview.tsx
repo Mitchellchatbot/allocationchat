@@ -336,7 +336,7 @@ const WidgetPreview = () => {
     if (window.location.search.indexOf('scaledbot_preview=true') !== -1) return;
     var params = ${JSON.stringify(embedParams.toString())};
     var parentUrl = encodeURIComponent(window.location.href);
-    var src = 'https://care-assist.io/widget-embed/${selectedPropertyId}?' + params + '&parentUrl=' + parentUrl;
+    var src = 'https://allocationchat-production.up.railway.app/widget-embed/${selectedPropertyId}?' + params + '&parentUrl=' + parentUrl;
     var iframe = document.createElement('iframe');
     iframe.id = 'scaledbot-widget';
     iframe.src = src;

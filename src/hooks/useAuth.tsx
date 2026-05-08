@@ -189,7 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const redirectUrl = `https://care-assist.io/auth`;
+    const redirectUrl = `https://allocationchat-production.up.railway.app/auth`;
     
     const { error } = await supabase.auth.signUp({
       email,
