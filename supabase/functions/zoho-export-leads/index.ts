@@ -124,6 +124,7 @@ async function createZohoLead(
   const description = [
     visitor.specialty ? `Specialty: ${visitor.specialty}` : null,
     visitor.country_of_training ? `Country of Training: ${visitor.country_of_training}` : null,
+    visitor.qualification_date ? `Qualification Date: ${visitor.qualification_date}` : null,
     visitor.age ? `Age: ${visitor.age}` : null,
   ].filter(Boolean).join(" | ");
 
@@ -258,7 +259,7 @@ Deno.serve(async (req) => {
 
       const { data: visitor } = await supabase
         .from("visitors")
-        .select("name, email, phone, age, specialty, country_of_training, qualified")
+        .select("name, email, phone, age, specialty, country_of_training, qualification_date, qualified")
         .eq("id", visitorId)
         .single();
 

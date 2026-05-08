@@ -17,10 +17,11 @@ interface ExtractedInfo {
   age?: string;
   specialty?: string;
   country_of_training?: string;
+  qualification_date?: string;
 }
 
 const EXTRACT_FIELDS: (keyof ExtractedInfo)[] = [
-  'name', 'email', 'phone', 'age', 'specialty', 'country_of_training',
+  'name', 'email', 'phone', 'age', 'specialty', 'country_of_training', 'qualification_date',
 ];
 
 const isPlaceholder = (val?: string | null): boolean => {
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
 
     const { data: visitor } = await supabase
       .from('visitors')
-      .select('name, email, phone, age, specialty, country_of_training')
+      .select('name, email, phone, age, specialty, country_of_training, qualification_date')
       .eq('id', visitorId)
       .single();
 
@@ -137,6 +138,7 @@ Deno.serve(async (req) => {
                 age: { type: 'string', description: "The doctor's age if mentioned" },
                 specialty: { type: 'string', description: "The doctor's medical specialty (e.g. Cardiology, Radiology, General Practice, Surgery)" },
                 country_of_training: { type: 'string', description: "The country where the doctor completed their medical training" },
+                qualification_date: { type: 'string', description: "The date or year the doctor obtained their specialty qualification (e.g. '2015', 'June 2018')" },
               },
               additionalProperties: false,
             },
