@@ -39,6 +39,7 @@ interface Visitor {
   age: string | null;
   specialty: string | null;
   country_of_training: string | null;
+  qualification_date: string | null;
   qualified: boolean | null;
   location: string | null;
   gclid: string | null;
@@ -88,7 +89,7 @@ export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTa
 
     const { data, error } = await supabase
       .from('visitors')
-      .select('id, name, email, phone, age, specialty, country_of_training, qualified, location, gclid, created_at')
+      .select('id, name, email, phone, age, specialty, country_of_training, qualification_date, qualified, location, gclid, created_at')
       .in('id', visitorIds)
       .order('created_at', { ascending: false });
 

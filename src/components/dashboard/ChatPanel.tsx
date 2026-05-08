@@ -391,19 +391,22 @@ const VisitorInfoSidebar = ({
 
       if (!response.ok) throw new Error(data.error || 'Extraction failed');
 
+      // Always re-fetch the full visitor — even if no NEW info was extracted, the
+      // local panel state may be stale (e.g. the cron already populated fields the
+      // page never saw a realtime update for).
+      const { data: updated } = await supabase
+        .from('visitors')
+        .select('*')
+        .eq('id', visitor.id)
+        .single();
+      if (updated) {
+        setLocalVisitor(updated);
+      }
+
       if (data?.extracted && data.info) {
-        // Re-fetch the full visitor to get updated fields
-        const { data: updated } = await supabase
-          .from('visitors')
-          .select('*')
-          .eq('id', visitor.id)
-          .single();
-        if (updated) {
-          setLocalVisitor(updated);
-        }
         toast({ title: 'Visitor info updated', description: `Updated: ${Object.keys(data.info).join(', ')}` });
       } else {
-        toast({ title: 'No new info found', description: 'All fields are already up to date.' });
+        toast({ title: 'Refreshed', description: 'Visitor details synced from database.' });
       }
     } catch (err: any) {
       console.error('Re-extraction failed:', err);
@@ -415,7 +418,7 @@ const VisitorInfoSidebar = ({
   }, [conversationId, visitor.id]);
 
   // Check if we have any treatment-specific info
-  const hasTreatmentInfo = localVisitor.addiction_history || localVisitor.drug_of_choice || localVisitor.treatment_interest || localVisitor.insurance_info || localVisitor.urgency_level || (localVisitor as any).insurance_card_url;
+  const hasPracticeInfo = (localVisitor as any).specialty || (localVisitor as any).country_of_training || (localVisitor as any).qualification_date;
 
   // Determine urgency badge color
   const getUrgencyBadge = (urgency: string) => {
@@ -465,41 +468,16 @@ const VisitorInfoSidebar = ({
           {v.occupation && <EditableInfoItem icon={Briefcase} label="Work" value={v.occupation} fieldKey="occupation" visitorId={vId} onUpdated={handleFieldUpdated} />}
         </div>
 
-        {/* Treatment Details Section */}
-        {hasTreatmentInfo && (
+        {/* Practice Details Section */}
+        {hasPracticeInfo && (
           <div className="p-3 border-t border-border/30 space-y-0.5">
             <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
-              <Heart className="h-3 w-3" />
-              Treatment Details
+              <Briefcase className="h-3 w-3" />
+              Practice Details
             </p>
-            {v.drug_of_choice && <EditableInfoItem icon={Pill} label="Substance" value={v.drug_of_choice} fieldKey="drug_of_choice" visitorId={vId} onUpdated={handleFieldUpdated} />}
-            {v.addiction_history && <EditableInfoItem icon={Calendar} label="History" value={v.addiction_history} fieldKey="addiction_history" visitorId={vId} onUpdated={handleFieldUpdated} />}
-            {v.treatment_interest && <EditableInfoItem icon={Building} label="Seeking" value={v.treatment_interest} fieldKey="treatment_interest" visitorId={vId} onUpdated={handleFieldUpdated} />}
-            {v.insurance_info && <EditableInfoItem icon={Shield} label="Insurance" value={v.insurance_info} fieldKey="insurance_info" visitorId={vId} onUpdated={handleFieldUpdated} />}
-            {(v as any).insurance_card_url && (
-              <div className="flex items-center gap-2 py-1.5 px-1 -mx-1">
-                <Shield className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs text-muted-foreground min-w-[50px]">Card:</span>
-                <a href={(v as any).insurance_card_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">
-                  View Photo
-                </a>
-              </div>
-            )}
-            {v.urgency_level && (
-              <div className="group flex items-center gap-2 py-1.5 hover:bg-muted/30 rounded px-1 -mx-1">
-                <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs text-muted-foreground min-w-[50px]">Urgency:</span>
-                {getUrgencyBadge(v.urgency_level)}
-                <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0 ml-auto">
-                  <button onClick={async () => {
-                    await supabase.from('visitors').update({ urgency_level: null }).eq('id', vId);
-                    handleFieldUpdated('urgency_level', null);
-                  }} className="p-0.5 rounded hover:bg-destructive/10" title="Clear field">
-                    <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                  </button>
-                </div>
-              </div>
-            )}
+            {(v as any).specialty && <EditableInfoItem icon={Briefcase} label="Specialty" value={(v as any).specialty} fieldKey="specialty" visitorId={vId} onUpdated={handleFieldUpdated} />}
+            {(v as any).country_of_training && <EditableInfoItem icon={Globe} label="Trained In" value={(v as any).country_of_training} fieldKey="country_of_training" visitorId={vId} onUpdated={handleFieldUpdated} />}
+            {(v as any).qualification_date && <EditableInfoItem icon={Calendar} label="Qualified" value={(v as any).qualification_date} fieldKey="qualification_date" visitorId={vId} onUpdated={handleFieldUpdated} />}
           </div>
         )}
 

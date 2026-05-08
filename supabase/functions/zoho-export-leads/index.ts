@@ -134,7 +134,13 @@ async function createZohoLead(
       First_Name: firstName || undefined,
       Email: visitor.email || undefined,
       Phone: visitor.phone || undefined,
-      Designation: visitor.specialty || undefined,
+      // Custom fields on the user's Zoho — API names guessed from the UI labels
+      // ("Specialty", "Country of Specialty training?", "Age").
+      // If Zoho rejects an unknown field name, the API returns an error per row
+      // which we surface in logs; tweak the keys below to match the actual API names.
+      Specialty: visitor.specialty || undefined,
+      Country_of_Specialty_training: visitor.country_of_training || undefined,
+      Age: visitor.age || undefined,
       Description: description || undefined,
       Lead_Source: "Chatbot",
       Lead_Status: "New",
