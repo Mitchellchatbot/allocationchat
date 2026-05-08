@@ -17,8 +17,12 @@ const MAX_RETRIES = RETRY_DELAYS_MINUTES.length;
 function isQualified(visitor: Record<string, string | null>): boolean {
   const country = (visitor.country_of_training || '').toLowerCase();
   if (!QUALIFIED_COUNTRIES.some(c => country.includes(c))) return false;
-  const age = parseInt(visitor.age || '');
-  if (isNaN(age) || age < 30 || age > 60) return false;
+  // Age no longer required; only fail if explicitly provided and outside 30-60
+  const ageRaw = visitor.age?.trim();
+  if (ageRaw) {
+    const age = parseInt(ageRaw);
+    if (!isNaN(age) && (age < 30 || age > 60)) return false;
+  }
   return true;
 }
 

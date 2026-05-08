@@ -36,11 +36,14 @@ const cleanValue = (val?: string): string | undefined => {
 
 function isQualified(visitor: Record<string, string | null>): boolean {
   const country = (visitor.country_of_training || '').toLowerCase();
-  const countryOk = QUALIFIED_COUNTRIES.some(c => country.includes(c));
-  if (!countryOk) return false;
+  if (!QUALIFIED_COUNTRIES.some(c => country.includes(c))) return false;
 
-  const age = parseInt(visitor.age || '');
-  if (isNaN(age) || age < 30 || age > 60) return false;
+  // Age is no longer required, but if it was provided and falls outside 30-60, treat as unqualified.
+  const ageRaw = visitor.age?.trim();
+  if (ageRaw) {
+    const age = parseInt(ageRaw);
+    if (!isNaN(age) && (age < 30 || age > 60)) return false;
+  }
 
   return true;
 }
