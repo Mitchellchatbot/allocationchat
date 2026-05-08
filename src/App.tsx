@@ -13,7 +13,6 @@ import { ImpersonationProvider } from "./contexts/ImpersonationContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { PageLoader } from "./components/ui/loading";
-import { FeatureAnnouncementModal } from "./components/FeatureAnnouncementModal";
 
 // Global handler to catch unhandled promise rejections
 const useGlobalErrorHandlers = () => {
@@ -98,7 +97,6 @@ const RequireClient = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <>
-      <FeatureAnnouncementModal />
       {children}
     </>
   );
