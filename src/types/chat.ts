@@ -40,6 +40,9 @@ export interface Visitor {
   location?: string;
   currentPage?: string;
   createdAt: Date;
+  specialty?: string;
+  country_of_training?: string;
+  qualification_date?: string;
   addiction_history?: string;
   drug_of_choice?: string;
   treatment_interest?: string;
