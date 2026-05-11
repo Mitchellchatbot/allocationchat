@@ -125,8 +125,14 @@ export const ChatWidget = ({
   // Get the icon component from prop override, settings, or default
   const WidgetIconComponent = widgetIconMap[widgetIcon || settings?.widget_icon || 'message-circle'] || MessageCircle;
 
-  // Use AI agent info if available, otherwise use props
-  const displayName = currentAiAgent?.name || agentName;
+  // Use AI agent info if available, otherwise use props.
+  // Strip out built-in persona first names (Emily, Sarah, Michael, Daniel) so visiting
+  // doctors aren't misled into thinking they're talking to a specific real person.
+  const PERSONA_FIRST_NAMES = ['emily', 'sarah', 'michael', 'daniel'];
+  const rawName = currentAiAgent?.name || agentName;
+  const displayName = rawName && PERSONA_FIRST_NAMES.includes(rawName.trim().toLowerCase())
+    ? 'Allocation Assist'
+    : rawName;
   const displayAvatar = currentAiAgent?.avatar_url || agentAvatar;
   // Only reveal name/avatar once real agent data is available — prevents flash of defaults
   const agentReady = !!currentAiAgent;
