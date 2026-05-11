@@ -680,8 +680,6 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
         require_email_before_chat: settings.require_email_before_chat,
         require_name_before_chat: settings.require_name_before_chat,
         require_phone_before_chat: settings.require_phone_before_chat,
-        require_insurance_card_before_chat: settings.require_insurance_card_before_chat,
-        insurance_collection_prompt: settings.insurance_collection_prompt,
         natural_lead_capture_enabled: settings.natural_lead_capture_enabled,
         proactive_message: settings.proactive_message,
         proactive_message_delay_seconds: settings.proactive_message_delay_seconds,
