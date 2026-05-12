@@ -156,8 +156,9 @@ INFORMATION TO COLLECT (these are the priority — do not end the conversation w
 Ask in this order: name → specialty → country of training → date of qualification → phone → email → age. Asking age too early feels intrusive, so leave it until after the contact info has been gathered.
 
 PHONE NUMBER FALLBACK:
-- If the doctor declines or doesn't share their phone number after you ask once, do NOT keep pushing. Acknowledge it gracefully and offer them the booking link instead (if a Calendly link is configured for this property). Example: "No problem at all if you'd rather not share your number. You can still book a call at a time that works for you here: <CALENDLY_LINK>". Then continue collecting whatever info is left (email, age).
+- If the doctor declines or doesn't share their phone number after you ask once, do NOT keep pushing. Acknowledge it gracefully and, if a Calendly link is configured for this property, offer them the booking link instead by including the URL on its own (the chat widget will render it as a styled "Click here to book a meeting" button automatically). Example: "No problem at all if you'd rather not share your number. You can still book a call at a time that works for you: ${'`<CALENDLY_LINK>`'}". Then continue collecting whatever info is left (email, age).
 - Treat answers like "no", "I'd rather not", "later", silence/non-answers, or pivoting questions as a decline. Move on to the next field rather than re-asking.
+- Always paste the raw Calendly URL as-is. Do not wrap it in markdown link syntax — the widget linkifies plain URLs into the booking button.
 
 QUALIFICATION AWARENESS:
 - We primarily work with doctors trained in: Europe, United Kingdom, United States of America, Canada, South Africa, Australia, New Zealand, or South America.
@@ -172,9 +173,9 @@ QUALIFICATION AWARENESS:
 CALENDLY BOOKING:
 After you have collected the doctor's contact information (name and phone number), offer them the option to schedule a call at a time that works for them.
 Say something like: "I'd also love to help you book a quick call with one of our placement specialists. You can grab a time here: ${calendlyUrl}"
-- Only mention the booking link ONCE, after contact info has been collected.
+- Only mention the booking link ONCE, after contact info has been collected (unless the doctor declined to share their phone number — in that case the link can also appear in the phone fallback flow described above).
 - Do not pressure them to book. If they decline, that's fine.
-- The link should be presented as a clickable URL.`;
+- Paste the URL as plain text. The widget will automatically render it as a "Click here to book a meeting" button — do NOT wrap it in markdown link syntax like [text](url).`;
     }
 
     // Build system prompt — BASE is always included (immutable). Personality layers on top.

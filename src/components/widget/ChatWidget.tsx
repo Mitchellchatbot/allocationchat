@@ -1,9 +1,51 @@
-import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Minimize2, User, Mail, ImagePlus, MessageSquare, MessagesSquare, Headphones, HelpCircle, Heart, Sparkles, Bot, Globe, LucideIcon } from 'lucide-react';
+import { useState, useRef, useEffect, Fragment } from 'react';
+import { MessageCircle, X, Send, Minimize2, User, Mail, ImagePlus, MessageSquare, MessagesSquare, Headphones, HelpCircle, Heart, Sparkles, Bot, Globe, Calendar, LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useWidgetChat } from '@/hooks/useWidgetChat';
 import { supabase } from '@/integrations/supabase/client';
+
+// Linkifies plain-text messages: URLs become clickable anchors.
+// Calendly URLs get a prominent "Book a meeting" pill so they stand out.
+const URL_REGEX = /(https?:\/\/[^\s)]+)/g;
+function renderMessageContent(content: string) {
+  const parts = content.split(URL_REGEX);
+  return parts.map((part, i) => {
+    if (!URL_REGEX.test(part)) {
+      // Reset lastIndex since URL_REGEX has the /g flag and we're reusing it.
+      URL_REGEX.lastIndex = 0;
+      return <Fragment key={i}>{part}</Fragment>;
+    }
+    URL_REGEX.lastIndex = 0;
+    const isCalendly = /calendly\.com/i.test(part);
+    if (isCalendly) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 mt-1.5 mr-1 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors text-primary font-medium no-underline"
+          style={{ background: 'var(--widget-primary, hsl(var(--primary)))', color: 'white' }}
+        >
+          <Calendar className="h-3.5 w-3.5" />
+          Click here to book a meeting
+        </a>
+      );
+    }
+    return (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline text-primary hover:text-primary/80"
+      >
+        {part}
+      </a>
+    );
+  });
+}
 
 export interface HardcodedMessage {
   type: 'agent' | 'visitor';
@@ -737,7 +779,7 @@ export const ChatWidget = ({
                           <div className="max-w-[75%] flex flex-col">
                             <div className="px-4 py-3 shadow-sm bg-card border border-border/30"
                               style={{ borderRadius: `${messageRadiusLarge} ${messageRadiusLarge} ${messageRadiusLarge} ${messageRadiusSmall}` }}>
-                              <p className="text-xs whitespace-pre-wrap leading-relaxed text-left">{msg.content}</p>
+                              <p className="text-xs whitespace-pre-wrap leading-relaxed text-left">{renderMessageContent(msg.content)}</p>
                               <p className="text-xs mt-1.5 text-right text-muted-foreground">{format(new Date(msg.created_at), 'h:mm a')}</p>
                             </div>
                           </div>
@@ -848,7 +890,7 @@ export const ChatWidget = ({
                         <div className="max-w-[75%] flex flex-col">
                           <div className="px-4 py-3 shadow-sm bg-card border border-border/30"
                             style={{ borderRadius: `${messageRadiusLarge} ${messageRadiusLarge} ${messageRadiusLarge} ${messageRadiusSmall}` }}>
-                            <p className="text-xs whitespace-pre-wrap leading-relaxed text-left">{msg.content}</p>
+                            <p className="text-xs whitespace-pre-wrap leading-relaxed text-left">{renderMessageContent(msg.content)}</p>
                             <p className="text-xs mt-1.5 text-right text-muted-foreground">{format(new Date(msg.created_at), 'h:mm a')}</p>
                           </div>
                         </div>
