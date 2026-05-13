@@ -18,9 +18,11 @@ interface ExtractedInfo {
   specialty?: string;
   country_of_training?: string;
   qualification_date?: string;
+  booking_call_required?: boolean;
 }
 
-const EXTRACT_FIELDS: (keyof ExtractedInfo)[] = [
+// String fields — only set if non-placeholder values are extracted.
+const EXTRACT_STRING_FIELDS: (keyof ExtractedInfo)[] = [
   'name', 'email', 'phone', 'age', 'specialty', 'country_of_training', 'qualification_date',
 ];
 
@@ -97,7 +99,7 @@ Deno.serve(async (req) => {
 
     const { data: visitor } = await supabase
       .from('visitors')
-      .select('name, email, phone, age, specialty, country_of_training, qualification_date')
+      .select('name, email, phone, age, specialty, country_of_training, qualification_date, booking_call_required')
       .eq('id', visitorId)
       .single();
 
@@ -118,7 +120,9 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 512,
-        system: `You are an information extraction assistant. Analyze the conversation and extract any personal information the doctor has shared naturally. Only extract information that was explicitly stated by the user (doctor messages), not inferred. If information is not clearly stated, do NOT include it — leave the field out entirely. Never return placeholder values like "N/A", "none", "unknown", or empty strings.`,
+        system: `You are an information extraction assistant. Analyze the conversation and extract any personal information the doctor has shared naturally. Only extract information that was explicitly stated by the user (doctor messages), not inferred. If information is not clearly stated, do NOT include it — leave the field out entirely. Never return placeholder values like "N/A", "none", "unknown", or empty strings.
+
+For booking_call_required: set this to true ONLY if the AI asked the doctor for their phone/mobile number AND the doctor either (a) explicitly declined (e.g. "no", "I'd rather not", "I don't want to share that") or (b) deflected the question and never came back to it. Do NOT set it true if the doctor did share a phone number, or if the phone question hasn't been asked yet. Leave the field unset (omit it) when the answer is unclear.`,
         messages: [
           {
             role: 'user',
@@ -139,6 +143,7 @@ Deno.serve(async (req) => {
                 specialty: { type: 'string', description: "The doctor's medical specialty (e.g. Cardiology, Radiology, General Practice, Surgery)" },
                 country_of_training: { type: 'string', description: "The country where the doctor completed their medical training" },
                 qualification_date: { type: 'string', description: "The date or year the doctor obtained their specialty qualification (e.g. '2015', 'June 2018')" },
+                booking_call_required: { type: 'boolean', description: "True if the doctor declined to share their phone number, or was asked for it and didn't reply with one. Leave unset otherwise." },
               },
               additionalProperties: false,
             },
@@ -177,12 +182,19 @@ Deno.serve(async (req) => {
     }
 
     const updates: Partial<ExtractedInfo> = {};
-    for (const field of EXTRACT_FIELDS) {
-      const extracted = cleanValue(extractedInfo[field]);
-      const existing = visitor?.[field];
+    for (const field of EXTRACT_STRING_FIELDS) {
+      const extracted = cleanValue(extractedInfo[field] as string | undefined);
+      const existing = visitor?.[field as string];
       if (extracted && isPlaceholder(existing)) {
-        updates[field] = extracted;
+        (updates as any)[field] = extracted;
       }
+    }
+
+    // booking_call_required is a boolean — only flip from false → true, never the
+    // other way (a doctor who declined once shouldn't get un-flagged by a later
+    // re-extraction). Stored as a real boolean column, not a placeholder string.
+    if (extractedInfo.booking_call_required === true && (visitor as any)?.booking_call_required !== true) {
+      (updates as any).booking_call_required = true;
     }
 
     if (Object.keys(updates).length === 0) {

@@ -128,6 +128,14 @@ async function createZohoLead(
     visitor.age ? `Age: ${visitor.age}` : null,
   ].filter(Boolean).join(" | ");
 
+  // Lead_Status mapping:
+  // - If the doctor declined/skipped the phone question, mark "Booking a Call Required"
+  //   so the recruitment team knows to nudge them through the Calendly link.
+  // - Otherwise default to "Not Contacted" (the first column in Zoho's pipeline).
+  const bookingFlagRaw = (visitor as any).booking_call_required;
+  const needsBooking = bookingFlagRaw === true || bookingFlagRaw === 'true';
+  const leadStatus = needsBooking ? "Booking a Call Required" : "Not Contacted";
+
   const leadPayload = {
     data: [{
       Last_Name: lastName,
@@ -143,7 +151,7 @@ async function createZohoLead(
       Age: visitor.age || undefined,
       Description: description || undefined,
       Lead_Source: "Chatbot",
-      Lead_Status: "New",
+      Lead_Status: leadStatus,
     }],
   };
 
@@ -265,7 +273,7 @@ Deno.serve(async (req) => {
 
       const { data: visitor } = await supabase
         .from("visitors")
-        .select("name, email, phone, age, specialty, country_of_training, qualification_date, qualified")
+        .select("name, email, phone, age, specialty, country_of_training, qualification_date, qualified, booking_call_required")
         .eq("id", visitorId)
         .single();
 
