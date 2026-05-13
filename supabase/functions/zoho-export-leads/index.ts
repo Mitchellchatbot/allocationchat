@@ -121,21 +121,21 @@ async function createZohoLead(
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : nameParts[0] || "Unknown";
   const firstName = nameParts.length > 1 ? nameParts[0] : "";
 
+  const bookingFlagRaw = (visitor as any).booking_call_required;
+  const needsBooking = bookingFlagRaw === true || bookingFlagRaw === 'true';
+
   const description = [
+    needsBooking ? "⚠ Booking a Call Required — visitor declined to share phone, given Calendly link to book themselves" : null,
     visitor.specialty ? `Specialty: ${visitor.specialty}` : null,
     visitor.country_of_training ? `Country of Training: ${visitor.country_of_training}` : null,
     visitor.qualification_date ? `Qualification Date: ${visitor.qualification_date}` : null,
     visitor.age ? `Age: ${visitor.age}` : null,
   ].filter(Boolean).join(" | ");
 
-  // Lead_Status mapping:
-  // - If the doctor declined/skipped the phone question, mark "Booking a Call Required"
-  //   so the recruitment team knows to nudge them through the Calendly link.
-  // - Otherwise default to "Not Contacted" (the first column in Zoho's pipeline).
-  const bookingFlagRaw = (visitor as any).booking_call_required;
-  const needsBooking = bookingFlagRaw === true || bookingFlagRaw === 'true';
-  const leadStatus = needsBooking ? "Booking a Call Required" : "Not Contacted";
-
+  // Lead_Status is always "Not Contacted" — the first column in Zoho's pipeline.
+  // The "Booking a Call Required" signal (when the doctor declined to share a
+  // phone number) is surfaced in the Description field instead, since Zoho's
+  // existing picklist doesn't include that status as an option.
   const leadPayload = {
     data: [{
       Last_Name: lastName,
@@ -151,7 +151,7 @@ async function createZohoLead(
       Age: visitor.age || undefined,
       Description: description || undefined,
       Lead_Source: "Chatbot",
-      Lead_Status: leadStatus,
+      Lead_Status: "Not Contacted",
     }],
   };
 
