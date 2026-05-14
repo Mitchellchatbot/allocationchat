@@ -1980,10 +1980,14 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
     const interval = setInterval(async () => {
       if (disposed) return;
       const sinceSeq = lastSeqRef.current;
+      // Only poll for agent messages — visitor messages are always added to
+      // local state by sendMessage with a temporary id, so polling them back
+      // would duplicate every send (the temp id never matches the DB UUID).
       const { data, error } = await supabase
         .from('messages')
         .select('id, content, sender_type, sender_id, created_at, sequence_number')
         .eq('conversation_id', convId)
+        .eq('sender_type', 'agent')
         .gt('sequence_number', sinceSeq)
         .order('sequence_number', { ascending: true });
       if (error || !data || data.length === 0) return;
@@ -1992,17 +1996,16 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
         const additions: Message[] = [];
         for (const row of data) {
           if (seen.has(row.id)) continue;
-          if (row.sender_type !== 'agent' && row.sender_type !== 'visitor') continue;
           // Dedup against last message by content (mirrors Realtime handler)
           // — the hybrid flow inserts agent messages locally before the row exists
           const last = additions.length > 0 ? additions[additions.length - 1] : prev[prev.length - 1];
-          if (last && last.sender_type === 'agent' && row.sender_type === 'agent' && last.content === row.content && row.sender_id === 'ai-bot') {
+          if (last && last.sender_type === 'agent' && last.content === row.content && row.sender_id === 'ai-bot') {
             continue;
           }
           additions.push({
             id: row.id,
             content: row.content,
-            sender_type: row.sender_type === 'agent' ? 'agent' : 'visitor',
+            sender_type: 'agent',
             created_at: row.created_at,
           });
         }
