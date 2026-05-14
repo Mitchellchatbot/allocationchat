@@ -1966,6 +1966,61 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
     };
   }, [conversationId, propertyId, isPreview, autoReplyIfPending]);
 
+  // Polling fallback: Realtime occasionally drops INSERT events (tab
+  // backgrounded, flaky network, websocket reconnect), so every 5s we
+  // catch up on any agent messages with sequence_number > lastSeqRef.
+  // Most cron-inserted messages (phone-decline Calendly, etc.) get
+  // delivered via Realtime; this is just the safety net.
+  useEffect(() => {
+    if (isPreview || !propertyId || propertyId === 'demo') return;
+    const convId = conversationIdRef.current;
+    if (!convId) return;
+
+    let disposed = false;
+    const interval = setInterval(async () => {
+      if (disposed) return;
+      const sinceSeq = lastSeqRef.current;
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id, content, sender_type, sender_id, created_at, sequence_number')
+        .eq('conversation_id', convId)
+        .gt('sequence_number', sinceSeq)
+        .order('sequence_number', { ascending: true });
+      if (error || !data || data.length === 0) return;
+      setMessages(prev => {
+        const seen = new Set(prev.map(m => m.id));
+        const additions: Message[] = [];
+        for (const row of data) {
+          if (seen.has(row.id)) continue;
+          if (row.sender_type !== 'agent' && row.sender_type !== 'visitor') continue;
+          // Dedup against last message by content (mirrors Realtime handler)
+          // — the hybrid flow inserts agent messages locally before the row exists
+          const last = additions.length > 0 ? additions[additions.length - 1] : prev[prev.length - 1];
+          if (last && last.sender_type === 'agent' && row.sender_type === 'agent' && last.content === row.content && row.sender_id === 'ai-bot') {
+            continue;
+          }
+          additions.push({
+            id: row.id,
+            content: row.content,
+            sender_type: row.sender_type === 'agent' ? 'agent' : 'visitor',
+            created_at: row.created_at,
+          });
+        }
+        if (additions.length === 0) return prev;
+        return [...prev, ...additions];
+      });
+      const maxSeq = data[data.length - 1].sequence_number ?? sinceSeq;
+      if (typeof maxSeq === 'number') {
+        lastSeqRef.current = Math.max(lastSeqRef.current, maxSeq);
+      }
+    }, 5000);
+
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+    };
+  }, [conversationId, propertyId, isPreview]);
+
   return {
     messages,
     sendMessage,
