@@ -1,0 +1,160 @@
+// Cron-triggered: for conversations where the AI asked for a phone number but
+// the doctor hasn't replied within ~1 minute, automatically post a follow-up
+// agent message offering the Calendly booking link. Also flips the visitor's
+// booking_call_required flag so the Zoho export surfaces them with the
+// "Booking a Call Required" note in the Description.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, serviceKey);
+
+  // Look back further than the 1-minute trigger so we don't miss conversations
+  // whose phone_asked_at got set right before the cron fired. Cap at 1 hour so
+  // we don't re-process ancient threads if phone_followup_sent ever gets reset.
+  const cutoff = new Date(Date.now() - 60 * 1000).toISOString();
+  const lowerBound = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  const { data: candidates, error } = await supabase
+    .from("conversations")
+    .select("id, property_id, visitor_id, phone_asked_at")
+    .eq("phone_followup_sent", false)
+    .neq("status", "closed")
+    .lt("phone_asked_at", cutoff)
+    .gt("phone_asked_at", lowerBound)
+    .limit(50);
+
+  if (error) {
+    console.error("send-phone-followup: query error", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (!candidates || candidates.length === 0) {
+    return new Response(JSON.stringify({ sent: 0 }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  let sent = 0;
+  let skipped = 0;
+
+  for (const conv of candidates) {
+    try {
+      // Skip if the visitor has already replied since the phone was asked
+      const { data: laterVisitorMsg } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", conv.id)
+        .eq("sender_type", "visitor")
+        .gt("created_at", conv.phone_asked_at!)
+        .limit(1)
+        .maybeSingle();
+
+      if (laterVisitorMsg) {
+        // Visitor responded — clear the trigger so a future re-ask can fire again
+        await supabase
+          .from("conversations")
+          .update({ phone_asked_at: null, phone_followup_sent: false })
+          .eq("id", conv.id);
+        skipped++;
+        continue;
+      }
+
+      // Skip if the visitor has actually shared a phone number already (defensive)
+      const { data: visitor } = await supabase
+        .from("visitors")
+        .select("phone")
+        .eq("id", conv.visitor_id)
+        .maybeSingle();
+
+      if (visitor?.phone) {
+        await supabase
+          .from("conversations")
+          .update({ phone_followup_sent: true })
+          .eq("id", conv.id);
+        skipped++;
+        continue;
+      }
+
+      // Fetch the property's Calendly URL — required to send a useful fallback
+      const { data: property } = await supabase
+        .from("properties")
+        .select("calendly_url")
+        .eq("id", conv.property_id)
+        .maybeSingle();
+
+      const calendlyUrl = (property as any)?.calendly_url as string | null;
+      if (!calendlyUrl) {
+        // No Calendly configured — mark as sent so we don't keep retrying, but log
+        console.warn(`send-phone-followup: skipping ${conv.id} — no Calendly URL on property ${conv.property_id}`);
+        await supabase
+          .from("conversations")
+          .update({ phone_followup_sent: true })
+          .eq("id", conv.id);
+        skipped++;
+        continue;
+      }
+
+      // Compose the fallback message (mirrors the prompt's phone-decline copy)
+      const followupContent =
+        `No problem at all if you'd rather not share your number. You can still book a call at a time that works for you: ${calendlyUrl}`;
+
+      // Next sequence number for this conversation
+      const { data: maxSeq } = await supabase
+        .from("messages")
+        .select("sequence_number")
+        .eq("conversation_id", conv.id)
+        .order("sequence_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const nextSeq = ((maxSeq?.sequence_number as number | undefined) || 0) + 1;
+
+      const { error: insertErr } = await supabase.from("messages").insert({
+        conversation_id: conv.id,
+        sender_id: "ai-bot",
+        sender_type: "agent",
+        content: followupContent,
+        sequence_number: nextSeq,
+      });
+
+      if (insertErr) {
+        console.error(`send-phone-followup: insert failed for ${conv.id}:`, insertErr);
+        continue;
+      }
+
+      // Mark conversation as having the follow-up sent and flip the visitor's
+      // booking_call_required flag so the next Zoho export captures it.
+      await supabase
+        .from("conversations")
+        .update({ phone_followup_sent: true, updated_at: new Date().toISOString() })
+        .eq("id", conv.id);
+
+      await supabase
+        .from("visitors")
+        .update({ booking_call_required: true })
+        .eq("id", conv.visitor_id);
+
+      sent++;
+      console.log(`send-phone-followup: posted Calendly fallback for ${conv.id}`);
+    } catch (e) {
+      console.error(`send-phone-followup: unexpected error for ${conv.id}:`, e);
+    }
+  }
+
+  return new Response(JSON.stringify({ sent, skipped, total: candidates.length }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+});

@@ -213,6 +213,21 @@ Deno.serve(async (req) => {
       updatePayload.last_visitor_message_at = new Date().toISOString();
     }
 
+    // Detect when the AI is asking the doctor for their phone number so a cron
+    // can send the Calendly fallback if they don't reply within ~1 minute.
+    // Heuristic only — keeps a list of common phone-ask phrasings the prompt produces.
+    if (senderType === "agent") {
+      const text = String(content).toLowerCase();
+      const looksLikePhoneAsk =
+        /\b(phone|mobile|cell|whatsapp|number)\b/.test(text) &&
+        /\b(share|reach|contact|best|grab|what|whats|what's|give|drop|provide)\b/.test(text) &&
+        /\?/.test(text);
+      if (looksLikePhoneAsk) {
+        updatePayload.phone_asked_at = new Date().toISOString();
+        updatePayload.phone_followup_sent = false;
+      }
+    }
+
     if (aiQueueAction === "queue") {
       updatePayload.ai_queued_at = new Date().toISOString();
       updatePayload.ai_queued_preview = aiQueuePreview ?? null;
