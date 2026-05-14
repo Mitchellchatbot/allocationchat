@@ -459,6 +459,10 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
   const aiEnabledRef = useRef<boolean>(true); // Tracks dashboard AI toggle (do not conflate with human takeover)
   const prevAiEnabledRef = useRef<boolean | null>(null);
   const autoReplyInFlightRef = useRef(false);
+  // Set by widget-save-message when the server auto-posts the Calendly fallback
+  // after a phone-decline. Consumed on the very next AI turn to suppress the
+  // duplicate response from chat-ai.
+  const phoneDeclineHandledRef = useRef(false);
   const lastAutoReplyVisitorSeqRef = useRef<number>(0);
   // True while sendMessage's hybrid flow (generate→queue→wait→send) is in progress.
   // Prevents autoReplyIfPending from firing a duplicate AI message for the same visitor turn.
@@ -1152,6 +1156,13 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
             if (typeof data.ai_enabled === 'boolean') {
               aiEnabledRef.current = data.ai_enabled;
             }
+            // If the server auto-posted the Calendly fallback because this
+            // visitor message declined the phone question, suppress the AI's
+            // next reply so we don't duplicate the booking link. The Realtime
+            // subscription will render the agent message on its own.
+            if (data.phone_decline_handled === true) {
+              phoneDeclineHandledRef.current = true;
+            }
           }
         }).catch(e => console.error('Failed to save visitor message:', e));
       }
@@ -1200,6 +1211,14 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
 
     // Skip AI response if caller explicitly requested it (e.g. demo closing message)
     if (opts?.skipAiReply) return;
+
+    // Skip AI for this turn if the server already auto-posted the Calendly
+    // fallback in response to a phone-decline. Realtime will surface the
+    // agent message; the AI will pick the conversation back up on the next turn.
+    if (phoneDeclineHandledRef.current) {
+      phoneDeclineHandledRef.current = false;
+      return;
+    }
 
     // Build conversation history for AI (proactive messages are transient UI only)
     const conversationHistory = messages

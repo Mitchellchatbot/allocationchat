@@ -145,10 +145,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get conversation state (status + property for AI kill-switch check)
+    // Get conversation state (status + property for AI kill-switch check,
+    // phone_asked_at to detect decline replies)
     const { data: conv } = await supabase
       .from("conversations")
-      .select("status, ai_enabled, property_id")
+      .select("status, ai_enabled, property_id, phone_asked_at")
       .eq("id", conversationId)
       .single();
 
@@ -228,6 +229,49 @@ Deno.serve(async (req) => {
       }
     }
 
+    // If the doctor is *replying* to a phone-number question and the reply
+    // looks like a decline, post the Calendly fallback immediately rather than
+    // waiting for the 60s silence cron. Mirrors the prompt instructions in
+    // chat-ai for the phone-decline path so the booking link is guaranteed.
+    let declineCalendlyPosted = false;
+    if (senderType === "visitor" && conv?.phone_asked_at) {
+      const reply = String(content).toLowerCase().trim();
+      const looksLikeDecline =
+        /\b(no|nope|nah|n\/a|na|none|skip|pass)\b/.test(reply) ||
+        /(rather not|don'?t want|do not want|not comfortable|prefer not|don'?t (wanna|want to)|won'?t share|not (sharing|share|giving))/i.test(reply) ||
+        /(later|another time|not now|not yet|maybe later)/i.test(reply);
+      if (looksLikeDecline) {
+        const { data: property } = await supabase
+          .from("properties")
+          .select("calendly_url")
+          .eq("id", conv.property_id)
+          .maybeSingle();
+        const calendlyUrl = (property as any)?.calendly_url as string | null;
+        if (calendlyUrl) {
+          const fallbackContent =
+            `No problem at all if you'd rather not share your number. You can still book a call at a time that works for you: ${calendlyUrl}`;
+          const { error: declineInsertErr } = await supabase.from("messages").insert({
+            conversation_id: conversationId,
+            sender_id: "ai-bot",
+            sender_type: "agent",
+            content: fallbackContent,
+            sequence_number: nextSeq + 1,
+          });
+          if (!declineInsertErr) {
+            declineCalendlyPosted = true;
+            updatePayload.phone_followup_sent = true;
+            updatePayload.phone_asked_at = null;
+            await supabase
+              .from("visitors")
+              .update({ booking_call_required: true })
+              .eq("id", visitorId);
+          } else {
+            console.error("widget-save-message: decline-fallback insert failed", declineInsertErr);
+          }
+        }
+      }
+    }
+
     if (aiQueueAction === "queue") {
       updatePayload.ai_queued_at = new Date().toISOString();
       updatePayload.ai_queued_preview = aiQueuePreview ?? null;
@@ -247,7 +291,7 @@ Deno.serve(async (req) => {
       .update(updatePayload)
       .eq("id", conversationId);
 
-    return new Response(JSON.stringify({ success: true, sequence_number: nextSeq, conversationId, conversationCreated, ai_enabled: conv?.ai_enabled !== false }), {
+    return new Response(JSON.stringify({ success: true, sequence_number: nextSeq, conversationId, conversationCreated, ai_enabled: conv?.ai_enabled !== false, phone_decline_handled: declineCalendlyPosted }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
