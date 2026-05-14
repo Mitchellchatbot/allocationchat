@@ -1888,27 +1888,39 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
         (payload) => {
           if (disposed) return;
           const msg = payload.new as Record<string, unknown>;
-          // Only process human agent messages (AI messages are added locally by the hybrid flow)
-          if (msg.sender_type === 'agent' && msg.sender_id !== 'ai-bot') {
+          if (msg.sender_type !== 'agent') return;
+
+          const isHumanAgent = msg.sender_id !== 'ai-bot';
+          // Human takeover side-effects only fire for actual human agents — an
+          // ai-bot message inserted server-side (e.g. the phone-decline cron)
+          // shouldn't flip the conversation into human-handled mode.
+          if (isHumanAgent) {
             if (!humanHasTakenOverRef.current) {
               setHumanHasTakenOver(true);
               humanHasTakenOverRef.current = true;
             }
             setIsEscalated(true);
+          }
 
-            const newMsg: Message = {
-              id: msg.id as string,
-              content: msg.content as string,
-              sender_type: 'agent',
-              created_at: msg.created_at as string,
-            };
-            setMessages(prev => {
-              if (prev.some(m => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
-            if (typeof msg.sequence_number === 'number') {
-              lastSeqRef.current = Math.max(lastSeqRef.current, msg.sequence_number);
+          const newMsg: Message = {
+            id: msg.id as string,
+            content: msg.content as string,
+            sender_type: 'agent',
+            created_at: msg.created_at as string,
+          };
+          setMessages(prev => {
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            // Hybrid flow adds AI messages locally with an "ai-..." id ahead of
+            // the Realtime insert — if we already rendered the same content as
+            // the most-recent agent message, drop the duplicate.
+            if (!isHumanAgent) {
+              const last = prev[prev.length - 1];
+              if (last && last.sender_type === 'agent' && last.content === newMsg.content) return prev;
             }
+            return [...prev, newMsg];
+          });
+          if (typeof msg.sequence_number === 'number') {
+            lastSeqRef.current = Math.max(lastSeqRef.current, msg.sequence_number);
           }
         }
       )
