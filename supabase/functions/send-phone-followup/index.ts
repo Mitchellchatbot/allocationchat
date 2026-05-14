@@ -19,10 +19,10 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // Look back further than the 1-minute trigger so we don't miss conversations
-  // whose phone_asked_at got set right before the cron fired. Cap at 1 hour so
-  // we don't re-process ancient threads if phone_followup_sent ever gets reset.
-  const cutoff = new Date(Date.now() - 60 * 1000).toISOString();
+  // Fire the Calendly fallback if the doctor has been silent on the
+  // phone-number question for >=30s. Cap lookback at 1 hour so we don't
+  // re-process ancient threads if phone_followup_sent ever gets reset.
+  const cutoff = new Date(Date.now() - 30 * 1000).toISOString();
   const lowerBound = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
   const { data: candidates, error } = await supabase
