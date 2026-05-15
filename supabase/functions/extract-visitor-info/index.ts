@@ -5,10 +5,35 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Qualified regions plus their constituent countries. We match with word
+// boundaries (not substring) — substring matching let "russia" qualify because
+// it contains "us", and rejected legitimate replies like "Brazil" or "Germany"
+// because they don't literally contain "south america" or "europe".
 const QUALIFIED_COUNTRIES = [
-  'europe', 'united kingdom', 'uk', 'united states', 'usa', 'us', 'america',
-  'canada', 'south africa', 'australia', 'new zealand', 'south america',
+  // Region names (covers free-text answers like "trained in Europe")
+  'europe', 'south america',
+  // North America
+  'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada',
+  // UK + constituents
+  'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
+  // Oceania + Africa
+  'australia', 'new zealand', 'south africa',
+  // South American countries
+  'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',
+  'guyana', 'paraguay', 'peru', 'suriname', 'uruguay', 'venezuela', 'french guiana',
+  // European countries (commonly named in lieu of "Europe")
+  'ireland', 'germany', 'france', 'spain', 'italy', 'portugal', 'netherlands',
+  'holland', 'belgium', 'switzerland', 'austria', 'sweden', 'norway', 'denmark',
+  'finland', 'iceland', 'poland', 'czech republic', 'czechia', 'slovakia',
+  'hungary', 'romania', 'bulgaria', 'greece', 'croatia', 'slovenia', 'serbia',
+  'albania', 'bosnia', 'montenegro', 'macedonia', 'lithuania', 'latvia',
+  'estonia', 'luxembourg', 'malta', 'cyprus',
 ];
+
+const QUALIFIED_COUNTRIES_REGEX = new RegExp(
+  `\\b(${QUALIFIED_COUNTRIES.map(c => c.replace(/[.]/g, '\\.').replace(/\s+/g, '\\s+')).join('|')})\\b`,
+  'i',
+);
 
 interface ExtractedInfo {
   name?: string;
@@ -38,8 +63,8 @@ const cleanValue = (val?: string): string | undefined => {
 };
 
 function isQualified(visitor: Record<string, string | null>): boolean {
-  const country = (visitor.country_of_training || '').toLowerCase();
-  if (!QUALIFIED_COUNTRIES.some(c => country.includes(c))) return false;
+  const country = (visitor.country_of_training || '');
+  if (!QUALIFIED_COUNTRIES_REGEX.test(country)) return false;
 
   // Age is no longer required, but if it was provided and falls outside 30-60, treat as unqualified.
   const ageRaw = visitor.age?.trim();

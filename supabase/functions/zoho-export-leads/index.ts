@@ -5,18 +5,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Qualified regions plus their constituent countries. Word-boundary matching
+// (not substring) — keep this list in sync with extract-visitor-info.
 const QUALIFIED_COUNTRIES = [
-  'europe', 'united kingdom', 'uk', 'united states', 'usa', 'us', 'america',
-  'canada', 'south africa', 'australia', 'new zealand', 'south america',
+  'europe', 'south america',
+  'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada',
+  'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
+  'australia', 'new zealand', 'south africa',
+  'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',
+  'guyana', 'paraguay', 'peru', 'suriname', 'uruguay', 'venezuela', 'french guiana',
+  'ireland', 'germany', 'france', 'spain', 'italy', 'portugal', 'netherlands',
+  'holland', 'belgium', 'switzerland', 'austria', 'sweden', 'norway', 'denmark',
+  'finland', 'iceland', 'poland', 'czech republic', 'czechia', 'slovakia',
+  'hungary', 'romania', 'bulgaria', 'greece', 'croatia', 'slovenia', 'serbia',
+  'albania', 'bosnia', 'montenegro', 'macedonia', 'lithuania', 'latvia',
+  'estonia', 'luxembourg', 'malta', 'cyprus',
 ];
+
+const QUALIFIED_COUNTRIES_REGEX = new RegExp(
+  `\\b(${QUALIFIED_COUNTRIES.map(c => c.replace(/[.]/g, '\\.').replace(/\s+/g, '\\s+')).join('|')})\\b`,
+  'i',
+);
 
 // Retry backoff delays in minutes: attempt 1→5m, 2→30m, 3→2h, 4→8h, 5→give up
 const RETRY_DELAYS_MINUTES = [5, 30, 120, 480];
 const MAX_RETRIES = RETRY_DELAYS_MINUTES.length;
 
 function isQualified(visitor: Record<string, string | null>): boolean {
-  const country = (visitor.country_of_training || '').toLowerCase();
-  if (!QUALIFIED_COUNTRIES.some(c => country.includes(c))) return false;
+  const country = (visitor.country_of_training || '');
+  if (!QUALIFIED_COUNTRIES_REGEX.test(country)) return false;
   // Age no longer required; only fail if explicitly provided and outside 30-60
   const ageRaw = visitor.age?.trim();
   if (ageRaw) {
