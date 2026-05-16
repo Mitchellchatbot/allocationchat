@@ -129,11 +129,14 @@ async function refreshAccessToken(
 }
 
 // Returns the HTTP status code alongside the lead id so callers can react to 401 specifically.
+// When the lead fails, `error` carries the per-record message Zoho returned so it can be
+// surfaced in zoho_export_queue.error_message for debugging (Zoho returns 202 with per-row
+// errors rather than a top-level non-2xx).
 async function createZohoLead(
   apiDomain: string,
   accessToken: string,
   visitor: Record<string, string | null>,
-): Promise<{ id: string; status: number } | { id: null; status: number }> {
+): Promise<{ id: string; status: number; error?: string } | { id: null; status: number; error?: string }> {
   const nameParts = (visitor.name || "").trim().split(/\s+/);
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : nameParts[0] || "Unknown";
   const firstName = nameParts.length > 1 ? nameParts[0] : "";
@@ -193,12 +196,14 @@ async function createZohoLead(
   }
 
   const data = await res.json();
-  if (!res.ok || data.data?.[0]?.status === "error") {
+  const row = data?.data?.[0];
+  if (!res.ok || row?.status === "error" || !row?.details?.id) {
+    const zohoMsg = row?.message || row?.code || data?.message || JSON.stringify(data).slice(0, 400);
     console.error("Zoho create lead error:", JSON.stringify(data));
-    return { id: null, status: res.status };
+    return { id: null, status: res.status, error: zohoMsg };
   }
 
-  return { id: data.data?.[0]?.details?.id, status: res.status };
+  return { id: row.details.id, status: res.status };
 }
 
 Deno.serve(async (req) => {
@@ -333,7 +338,7 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         const retryCount = (queueItem?.retry_count ?? 0) + 1;
-        const errorMsg = `HTTP ${result.status} on attempt ${retryCount}`;
+        const errorMsg = `HTTP ${result.status} on attempt ${retryCount}${(result as { error?: string }).error ? ` — ${(result as { error?: string }).error}` : ''}`;
 
         if (retryCount > MAX_RETRIES) {
           // Permanently failed after max retries
