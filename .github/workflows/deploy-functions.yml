@@ -7,6 +7,7 @@ on:
     # This tells the robot to ONLY run if files inside the functions folder are changed
     paths:
       - 'supabase/functions/**'
+      - '.github/workflows/deploy-functions.yml'
   workflow_dispatch:
 
 jobs:
