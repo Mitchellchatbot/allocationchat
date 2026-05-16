@@ -29,7 +29,7 @@ jobs:
       - name: Deploy Secure Functions
         run: |
           echo "Deploying all standard secure functions..."
-          supabase functions deploy --project-ref $PROJECT_ID
+          supabase functions deploy --project-ref ${PROJECT_ID:-oiigbvfzovhnuitprsjt}
 
       - name: Deploy Public Widget Functions (No JWT)
         run: |
@@ -43,6 +43,6 @@ jobs:
             # We check if the folder actually exists before trying to deploy it
             if [ -d "supabase/functions/$func" ]; then
               echo "Deploying public function: $func"
-              supabase functions deploy "$func" --project-ref $PROJECT_ID --no-verify-jwt
+              supabase functions deploy "$func" --project-ref ${PROJECT_ID:-oiigbvfzovhnuitprsjt} --no-verify-jwt
             fi
           done
