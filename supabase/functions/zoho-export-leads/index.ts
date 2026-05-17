@@ -326,8 +326,30 @@ Deno.serve(async (req) => {
     let targetPropertyId: string = propertyId;
 
     if (visitorIds?.length) {
-      // Manual export from UI
+      // Manual export from UI. The dashboard sends propertyId='all' on the
+      // multi-property view, so don't trust the caller — derive the real
+      // property from the visitors themselves and (if they span more than one
+      // property) require the caller to scope down. Most UIs pick a single
+      // property anyway, so the common path is one .from("visitors") lookup.
       targetVisitorIds = visitorIds;
+      if (!propertyId || propertyId === 'all') {
+        const { data: vRows } = await supabase
+          .from("visitors")
+          .select("property_id")
+          .in("id", visitorIds);
+        const uniqueProps = [...new Set((vRows || []).map((v: { property_id: string }) => v.property_id).filter(Boolean))];
+        if (uniqueProps.length === 0) {
+          return new Response(JSON.stringify({ error: "Could not resolve property for selected visitors" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (uniqueProps.length > 1) {
+          return new Response(JSON.stringify({ error: `Selected visitors span ${uniqueProps.length} properties — export one property at a time` }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        targetPropertyId = uniqueProps[0];
+      }
     } else {
       // Queue-based: fetch pending exports due for processing
       const { data: queue } = await supabase
