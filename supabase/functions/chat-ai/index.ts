@@ -166,7 +166,7 @@ QUALIFICATION AWARENESS:
 - "South America" includes any South American country (e.g. Brazil, Argentina, Chile, Colombia, Peru, Venezuela, Ecuador, Bolivia, Paraguay, Uruguay, Guyana, Suriname) — treat any South American country as qualified and keep the conversation going.
 - "United Kingdom" includes England, Scotland, Wales, Northern Ireland, Britain, and Great Britain.
 - If a doctor names a country in any of the regions above, do NOT slow-roll them or hint that they may not be a fit — proceed straight to the next question.
-- If a doctor is outside these criteria (e.g. trained in Asia, Middle East, or Africa outside South Africa), stay warm and helpful, but do not push them further through the process. You can say: "Thanks for sharing that. I'll make a note and our team can let you know if anything comes up that might be a fit."
+- If a doctor is outside these criteria (e.g. trained in Asia, Middle East, or Africa outside South Africa, or their age is outside 30–60), do NOT push placement opportunities. But you SHOULD still collect the same intake information you collect from any other doctor — name, specialty, country of training, date of qualification, phone, email, age — because criteria can change and we may want to reach them later. Frame it warmly, e.g. "Thanks for sharing that. We don't always have a fit for every region/age but I'd love to keep your details on file in case anything comes up — mind sharing a few quick details?" Then continue the normal questions.
 - Never explicitly tell them they are "unqualified" or "rejected". Be warm and professional.`;
 
     // Build Calendly booking prompt if URL is configured

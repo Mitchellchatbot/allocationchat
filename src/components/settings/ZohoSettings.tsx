@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Link2, Unlink } from 'lucide-react';
+import { Loader2, Link2, Unlink, ExternalLink } from 'lucide-react';
 
 interface ZohoSettingsProps {
   propertyId: string;
@@ -20,16 +20,60 @@ interface ZohoConnection {
   connected_at: string;
 }
 
+interface ExportedLead {
+  visitor_id: string;
+  zoho_lead_id: string;
+  exported_at: string;
+  name: string | null;
+  email: string | null;
+  specialty: string | null;
+  country_of_training: string | null;
+}
+
 export const ZohoSettings = ({ propertyId }: ZohoSettingsProps) => {
   const [connection, setConnection] = useState<ZohoConnection | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [dataCenter, setDataCenter] = useState('com');
   const [autoExportOnPhone, setAutoExportOnPhone] = useState(true);
+  const [recentLeads, setRecentLeads] = useState<ExportedLead[]>([]);
 
   useEffect(() => {
     fetchConnection();
+    fetchRecentExports();
   }, [propertyId]);
+
+  const fetchRecentExports = async () => {
+    // Pull the last 20 exported leads scoped to this property. Inner-joined
+    // through visitors so we get the doctor's name/email/specialty alongside
+    // the Zoho lead id we use to build the deep-link.
+    const { data } = await supabase
+      .from('zoho_exports' as any)
+      .select('visitor_id, zoho_lead_id, exported_at, visitors!inner(name, email, specialty, country_of_training, property_id)')
+      .eq('visitors.property_id', propertyId)
+      .order('exported_at', { ascending: false })
+      .limit(20);
+    const rows = (data as Array<Record<string, unknown>> | null) || [];
+    setRecentLeads(rows.map(r => {
+      const v = (r.visitors as Record<string, unknown>) || {};
+      return {
+        visitor_id: r.visitor_id as string,
+        zoho_lead_id: r.zoho_lead_id as string,
+        exported_at: r.exported_at as string,
+        name: (v.name as string) || null,
+        email: (v.email as string) || null,
+        specialty: (v.specialty as string) || null,
+        country_of_training: (v.country_of_training as string) || null,
+      };
+    }));
+  };
+
+  // Zoho's CRM UI URL by data center. Works without org_id — Zoho redirects
+  // to the logged-in user's org context automatically.
+  const zohoLeadUrl = (leadId: string) => {
+    const dc = connection?.data_center || 'com';
+    return `https://crm.zoho.${dc}/crm/tab/Leads/${leadId}`;
+  };
 
   const fetchConnection = async () => {
     setLoading(true);
@@ -209,6 +253,47 @@ export const ZohoSettings = ({ propertyId }: ZohoSettingsProps) => {
           </div>
         </CardContent>
       </Card>
+
+      {connection && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recently Exported Leads</CardTitle>
+            <CardDescription>The last 20 leads pushed to Zoho from this property. Click "View in Zoho" to open the lead.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentLeads.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No leads exported yet.</p>
+            ) : (
+              <div className="divide-y">
+                {recentLeads.map(lead => (
+                  <div key={lead.visitor_id} className="flex items-center justify-between py-3 gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{lead.name || 'Unknown name'}</p>
+                      <p className="text-sm text-muted-foreground truncate">
+                        {[lead.specialty, lead.country_of_training, lead.email].filter(Boolean).join(' • ') || '—'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Exported {new Date(lead.exported_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="shrink-0"
+                    >
+                      <a href={zohoLeadUrl(lead.zoho_lead_id)} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        View in Zoho
+                      </a>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
