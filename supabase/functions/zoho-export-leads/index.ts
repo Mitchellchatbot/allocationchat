@@ -117,19 +117,63 @@ const SPECIALTY_ALIASES: Record<string, string> = {
   'orthopaedic surgeon': 'Orthopedic Surgeon',
 };
 
-function mapSpecialtyToPicklist(raw?: string | null): string | undefined {
+// Ask Claude to map a free-text specialty to the closest picklist entry.
+// Catches typos ("oncolgy"), descriptive phrasing ("child doctor",
+// "skin doctor"), and synonyms the static alias map doesn't know.
+// Returns undefined if Claude can't find a reasonable match (rather than
+// guessing) — those leads will have an empty picklist field and the workflow
+// rule will still flag them, but at least we don't pollute Zoho with
+// confidently-wrong specialties.
+async function aiMatchSpecialty(raw: string): Promise<string | undefined> {
+  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!ANTHROPIC_API_KEY) {
+    console.warn('aiMatchSpecialty: ANTHROPIC_API_KEY not set');
+    return undefined;
+  }
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 50,
+        system: `You map a doctor's specialty (free text from a chat — may have typos, abbreviations, or non-medical phrasing like "child doctor" or "skin doctor") to the single best match from this exact picklist. Return ONLY the exact picklist string (copy verbatim, including any unusual spelling) or the literal word NONE if no entry is a reasonable match. Do not invent values. Do not explain.\n\nPicklist:\n${ZOHO_SPECIALTY_PICKLIST.join('\n')}`,
+        messages: [{ role: 'user', content: raw }],
+      }),
+    });
+    const data = await res.json();
+    const text = (data?.content?.[0]?.text || '').trim();
+    if (!text || text.toUpperCase() === 'NONE') return undefined;
+    // Validate the AI returned a real picklist value (it sometimes adds
+    // punctuation or paraphrases despite being told not to)
+    const match = ZOHO_SPECIALTY_PICKLIST_LOWER.get(text.toLowerCase());
+    if (!match) {
+      console.warn(`aiMatchSpecialty: model returned "${text}" which isn't in the picklist; ignoring`);
+      return undefined;
+    }
+    console.log(`aiMatchSpecialty: "${raw}" → "${match}"`);
+    return match;
+  } catch (e) {
+    console.error('aiMatchSpecialty: error', e);
+    return undefined;
+  }
+}
+
+async function mapSpecialtyToPicklist(raw?: string | null): Promise<string | undefined> {
   if (!raw) return undefined;
   const norm = raw.trim().toLowerCase();
   if (!norm) return undefined;
-  // Direct case-insensitive match against the picklist
+  // Tier 1 — direct case-insensitive match against the picklist (free, instant)
   const direct = ZOHO_SPECIALTY_PICKLIST_LOWER.get(norm);
   if (direct) return direct;
-  // Alias map (common shorthand / British spellings)
+  // Tier 2 — alias map for common shorthand / British spellings (free, instant)
   if (SPECIALTY_ALIASES[norm]) return SPECIALTY_ALIASES[norm];
-  // No match — leave undefined. Zoho would silently drop a bad picklist write
-  // anyway, and the raw text still lands in the Specialty (Specialty Details)
-  // free-text field so nothing's lost.
-  return undefined;
+  // Tier 3 — AI fuzzy match for typos and descriptive phrasing
+  return await aiMatchSpecialty(raw);
 }
 
 async function deriveKey(usage: "encrypt" | "decrypt"): Promise<CryptoKey> {
@@ -247,7 +291,7 @@ async function createZohoLead(
   // The "Booking a Call Required" signal (when the doctor declined to share a
   // phone number) is surfaced in the Description field instead, since Zoho's
   // existing picklist doesn't include that status as an option.
-  const specialtyPicklist = mapSpecialtyToPicklist(visitor.specialty);
+  const specialtyPicklist = await mapSpecialtyToPicklist(visitor.specialty);
 
   const leadPayload = {
     data: [{
