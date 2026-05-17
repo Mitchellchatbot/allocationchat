@@ -403,7 +403,10 @@ Deno.serve(async (req) => {
       accessToken = await decryptToken(connection.access_token_enc);
     }
 
-    const results = { exported: 0, skipped: 0, errors: [] as string[] };
+    // skipped is the legacy total (unqualified + already exported) — kept for
+    // back-compat with any caller reading it. alreadyExported and
+    // skippedUnqualified are the new, accurate breakdown.
+    const results = { exported: 0, skipped: 0, alreadyExported: 0, skippedUnqualified: 0, errors: [] as string[] };
 
     for (const visitorId of targetVisitorIds) {
       // Skip if already successfully exported
@@ -415,6 +418,7 @@ Deno.serve(async (req) => {
 
       if (existing) {
         results.skipped++;
+        results.alreadyExported++;
         continue;
       }
 
@@ -433,6 +437,7 @@ Deno.serve(async (req) => {
       if (visitor.qualified === false || !isQualified(visitor as Record<string, string | null>)) {
         console.log(`Skipping unqualified visitor ${visitorId}`);
         results.skipped++;
+        results.skippedUnqualified++;
         await supabase
           .from("zoho_export_queue")
           .update({ status: "skipped", updated_at: new Date().toISOString() })

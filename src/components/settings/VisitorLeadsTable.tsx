@@ -161,13 +161,24 @@ export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTa
           toast.error(msg || 'Failed to export leads to Zoho');
         }
       } else {
-        const { exported = 0, skipped = 0, errors = [] } = data;
-        if (exported === 0 && skipped > 0) {
-          toast.warning(`${skipped} lead(s) were unqualified and not exported to Zoho.`);
+        const { exported = 0, alreadyExported = 0, skippedUnqualified = 0, skipped = 0, errors = [] } = data;
+        // Older deploys returned only `skipped` (combined). If the new fields
+        // aren't present, fall back to treating skipped as unqualified.
+        const dupes = alreadyExported || 0;
+        const unq = skippedUnqualified || (alreadyExported === undefined ? skipped : 0);
+
+        if (exported === 0 && dupes > 0 && unq === 0 && errors.length === 0) {
+          toast.info(`${dupes} lead(s) already in Zoho — nothing to export.`);
+        } else if (exported === 0 && unq > 0 && dupes === 0) {
+          toast.warning(`${unq} lead(s) were unqualified and not exported to Zoho.`);
         } else if (errors.length > 0) {
-          toast.warning(`Exported ${exported}, skipped ${skipped} unqualified, ${errors.length} failed.`);
+          toast.warning(`Exported ${exported}, ${unq} unqualified, ${dupes} already in Zoho, ${errors.length} failed.`);
         } else {
-          toast.success(`Exported ${exported} qualified lead(s) to Zoho CRM. ${skipped > 0 ? `${skipped} unqualified skipped.` : ''}`);
+          const extras = [
+            unq > 0 ? `${unq} unqualified` : null,
+            dupes > 0 ? `${dupes} already in Zoho` : null,
+          ].filter(Boolean).join(', ');
+          toast.success(`Exported ${exported} qualified lead(s) to Zoho CRM${extras ? ` (${extras})` : ''}.`);
         }
         setSelectedIds(new Set());
         fetchExportedVisitors();
