@@ -158,16 +158,45 @@ async function createZohoLead(
   // The "Booking a Call Required" signal (when the doctor declined to share a
   // phone number) is surfaced in the Description field instead, since Zoho's
   // existing picklist doesn't include that status as an option.
+  // Normalize specialty for the Specialty_New picklist. Zoho silently drops the
+  // write if the value doesn't match a picklist entry exactly, so trim and
+  // title-case ("oncology" / "ONCOLOGY" / "  oncology" → "Oncology") to maximize
+  // the chance of an exact match. If your picklist lacks the exact specialty
+  // the user typed, add it in Zoho (Setup → Customization → Specialty global set)
+  // or extend the alias map below.
+  const titleCase = (s: string) =>
+    s.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  const SPECIALTY_ALIASES: Record<string, string> = {
+    'er': 'Emergency Medicine',
+    'er doctor': 'Emergency Medicine',
+    'er physician': 'Emergency Medicine',
+    'emergency': 'Emergency Medicine',
+    'a&e': 'Emergency Medicine',
+    'gp': 'General Practice',
+    'general physician': 'General Practice',
+    'family medicine': 'General Practice',
+    'ob/gyn': 'Obstetrics and Gynaecology',
+    'obgyn': 'Obstetrics and Gynaecology',
+    'obstetrics': 'Obstetrics and Gynaecology',
+    'gynaecology': 'Obstetrics and Gynaecology',
+    'gynecology': 'Obstetrics and Gynaecology',
+  };
+  const rawSpec = (visitor.specialty || '').trim().toLowerCase();
+  const specialtyPicklist = rawSpec
+    ? (SPECIALTY_ALIASES[rawSpec] || titleCase(rawSpec))
+    : undefined;
+
   const leadPayload = {
     data: [{
       Last_Name: lastName,
       First_Name: firstName || undefined,
       Email: visitor.email || undefined,
       Phone: visitor.phone || undefined,
-      // Custom fields on the user's Zoho — API names guessed from the UI labels
-      // ("Specialty", "Country of Specialty training?", "Age").
-      // If Zoho rejects an unknown field name, the API returns an error per row
-      // which we surface in logs; tweak the keys below to match the actual API names.
+      // Two specialty fields on the user's Zoho: Specialty_New is a picklist
+      // (used by their unqualified-lead workflow rule), Specialty is a free-text
+      // field shown as "Specialty Details" in the UI. Populate both so the
+      // workflow rule sees a value AND we keep the raw user text intact.
+      Specialty_New: specialtyPicklist,
       Specialty: visitor.specialty || undefined,
       Country_of_Specialty_training: visitor.country_of_training || undefined,
       Age: visitor.age || undefined,
