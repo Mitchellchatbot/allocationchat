@@ -43,6 +43,95 @@ function isQualified(visitor: Record<string, string | null>): boolean {
   return true;
 }
 
+// Exact picklist values from the user's Zoho "Specialty" global set. Zoho's
+// Specialty_New field silently drops writes that don't match a picklist value
+// exactly, so we normalize whatever the AI extracted to one of these. Update
+// this list (and ZOHO_SPECIALTY_PICKLIST_LOWER below) if Mitch adds new
+// values in Zoho — fetch with: GET /functions/v1/zoho-debug-fields?filter=specialty
+const ZOHO_SPECIALTY_PICKLIST = [
+  'Allergy', 'Anatomic Pathologist', 'Anesthesia', 'Audiology', 'Bariatric Surgery',
+  'Beauty Therapist', 'Breast Surgery', 'Cardiac Surgeon', 'Cardiology', 'Cardiothoracic Surgeon',
+  'Cardiovascular surgery', 'Chinese Medicine', 'Clinical Psychologist', 'Clinical Psychology',
+  'Colorectal Surgery', 'Cosmetic Surgery', 'Critical Care Medicine', 'Dermatology', 'Dietician',
+  'Embryologist', 'Emergency Medicine', 'Endocrinology', 'ENT', 'Facial and Oral Surgery',
+  'Family medicine', 'Fetal Medicine', 'Gastroenterology', 'Gastrointestinal', 'General Dentist',
+  'General Practitioner', 'General Surgery', 'Generic Councellor', 'Geriatrician', 'GP',
+  'Gynecology', 'Heamatology', 'Heamatology Oncology', 'Hepato- Pancreatic Surgery',
+  'Hyperbaric Medicine', 'Infectious Disease', 'Intensive care medicine', 'Intensivist',
+  'Internal Medicine', 'Interventional Cardiologist', 'Interventional Neurology',
+  'Interventional Radiologist', 'IVF', 'Laparoscopic', 'Liver Transplant', 'Medical Oncology',
+  'Microbiologist', 'Midwife', 'Naturopathic', 'Neonatology', 'Nephrology', 'Neurology',
+  'Neuropathology', 'Neuroradiology', 'Neurosurgeon', 'Nuclear Medicine', 'Nurse', 'OBGYN',
+  'Occupational Therapy', 'Oncology', 'Opthalmologist', 'Oral and Maxillofacial', 'Orthopedic',
+  'Orthopedic Spine Surgeon', 'Orthopedic Surgeon', 'Orthopedic Surgery', 'Pain Medicine',
+  'Palliative Care', 'Palliative Medicine', 'Pathologist', 'Pathology', 'Peadiatric endocrinologist',
+  'Pediatric Cardiologist', 'Pediatric Dentistry', 'Pediatric Emergency Medicine',
+  'Pediatric Endocrinology', 'Pediatric Gastroenterologist', 'Pediatric Genetic',
+  'Pediatric Intensivist', 'Pediatric Nephrology', 'Pediatric Neurologist', 'Pediatric Neurosurgeon',
+  'Pediatric OPthalmologist', 'Pediatric Orthopedic', 'Pediatric Pulmonology', 'Pediatric Surgery',
+  'Pediatrician', 'Physiatrist', 'Physical Therapy', 'Physical Therapy & Rehabilitation',
+  'Physiotherapy', 'PICU', 'Plastic Surgery', 'Podiatrist', 'Preventive Medicine', 'Psychiatry',
+  'Pulmonary', 'Pulmonologist', 'Radiation Oncology', 'Radiation Therapy', 'Radiographer',
+  'Radiology', 'Respiratory', 'Rheumatology', 'Sonographer', 'Speech Language Therapist',
+  'Sports Medicine', 'Stroke Medicine', 'Surgical Oncology', 'Thoracic surgery',
+  'Transfusion Medicine', 'Upper GI', 'Urogynecology', 'Urology', 'Vascular surgery',
+];
+const ZOHO_SPECIALTY_PICKLIST_LOWER = new Map(
+  ZOHO_SPECIALTY_PICKLIST.map(v => [v.toLowerCase(), v]),
+);
+
+// Common shorthand / synonyms / British spellings the AI extracts that don't
+// match a picklist value verbatim. Map them to the actual picklist string.
+const SPECIALTY_ALIASES: Record<string, string> = {
+  'er': 'Emergency Medicine',
+  'er doctor': 'Emergency Medicine',
+  'er physician': 'Emergency Medicine',
+  'emergency': 'Emergency Medicine',
+  'a&e': 'Emergency Medicine',
+  'a and e': 'Emergency Medicine',
+  'general practice': 'General Practitioner',
+  'general physician': 'General Practitioner',
+  'family doctor': 'Family medicine',
+  'family practice': 'Family medicine',
+  'ob/gyn': 'OBGYN',
+  'ob gyn': 'OBGYN',
+  'obstetrics': 'OBGYN',
+  'obstetrics and gynaecology': 'OBGYN',
+  'obstetrics and gynecology': 'OBGYN',
+  'gynaecology': 'Gynecology',
+  'paediatrics': 'Pediatrician',
+  'pediatrics': 'Pediatrician',
+  'paediatrician': 'Pediatrician',
+  'ent surgeon': 'ENT',
+  'otolaryngology': 'ENT',
+  'ophthalmology': 'Opthalmologist',
+  'ophthalmologist': 'Opthalmologist',
+  'haematology': 'Heamatology',
+  'haematology oncology': 'Heamatology Oncology',
+  'physiotherapist': 'Physiotherapy',
+  'physical therapist': 'Physical Therapy',
+  'plastics': 'Plastic Surgery',
+  'plastic surgeon': 'Plastic Surgery',
+  'orthopaedic': 'Orthopedic',
+  'orthopaedics': 'Orthopedic',
+  'orthopaedic surgeon': 'Orthopedic Surgeon',
+};
+
+function mapSpecialtyToPicklist(raw?: string | null): string | undefined {
+  if (!raw) return undefined;
+  const norm = raw.trim().toLowerCase();
+  if (!norm) return undefined;
+  // Direct case-insensitive match against the picklist
+  const direct = ZOHO_SPECIALTY_PICKLIST_LOWER.get(norm);
+  if (direct) return direct;
+  // Alias map (common shorthand / British spellings)
+  if (SPECIALTY_ALIASES[norm]) return SPECIALTY_ALIASES[norm];
+  // No match — leave undefined. Zoho would silently drop a bad picklist write
+  // anyway, and the raw text still lands in the Specialty (Specialty Details)
+  // free-text field so nothing's lost.
+  return undefined;
+}
+
 async function deriveKey(usage: "encrypt" | "decrypt"): Promise<CryptoKey> {
   const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const enc = new TextEncoder();
@@ -158,33 +247,7 @@ async function createZohoLead(
   // The "Booking a Call Required" signal (when the doctor declined to share a
   // phone number) is surfaced in the Description field instead, since Zoho's
   // existing picklist doesn't include that status as an option.
-  // Normalize specialty for the Specialty_New picklist. Zoho silently drops the
-  // write if the value doesn't match a picklist entry exactly, so trim and
-  // title-case ("oncology" / "ONCOLOGY" / "  oncology" → "Oncology") to maximize
-  // the chance of an exact match. If your picklist lacks the exact specialty
-  // the user typed, add it in Zoho (Setup → Customization → Specialty global set)
-  // or extend the alias map below.
-  const titleCase = (s: string) =>
-    s.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-  const SPECIALTY_ALIASES: Record<string, string> = {
-    'er': 'Emergency Medicine',
-    'er doctor': 'Emergency Medicine',
-    'er physician': 'Emergency Medicine',
-    'emergency': 'Emergency Medicine',
-    'a&e': 'Emergency Medicine',
-    'gp': 'General Practice',
-    'general physician': 'General Practice',
-    'family medicine': 'General Practice',
-    'ob/gyn': 'Obstetrics and Gynaecology',
-    'obgyn': 'Obstetrics and Gynaecology',
-    'obstetrics': 'Obstetrics and Gynaecology',
-    'gynaecology': 'Obstetrics and Gynaecology',
-    'gynecology': 'Obstetrics and Gynaecology',
-  };
-  const rawSpec = (visitor.specialty || '').trim().toLowerCase();
-  const specialtyPicklist = rawSpec
-    ? (SPECIALTY_ALIASES[rawSpec] || titleCase(rawSpec))
-    : undefined;
+  const specialtyPicklist = mapSpecialtyToPicklist(visitor.specialty);
 
   const leadPayload = {
     data: [{

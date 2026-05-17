@@ -65,7 +65,10 @@ Deno.serve(async (req) => {
     const accountsDomain = dataCenter === "com" ? "accounts.zoho.com" : `accounts.zoho.${dataCenter}`;
 
     const params = new URLSearchParams({
-      scope: "ZohoCRM.modules.leads.CREATE,ZohoCRM.modules.leads.READ",
+      // settings.fields.READ lets us read picklist values + field metadata so
+      // we can keep our payload field names + picklist values in sync with the
+      // user's Zoho without hand-editing every time they tweak a field.
+      scope: "ZohoCRM.modules.leads.CREATE,ZohoCRM.modules.leads.READ,ZohoCRM.settings.fields.READ",
       client_id: clientId,
       response_type: "code",
       redirect_uri: redirectUri,
