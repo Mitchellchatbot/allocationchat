@@ -10,6 +10,26 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Mirrors QUALIFIED_COUNTRIES in extract-visitor-info / zoho-export-leads /
+// widget-save-message. If you add a country to any of those, add it here too.
+const FOLLOWUP_QUALIFIED_COUNTRIES = [
+  'europe', 'south america', 'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada',
+  'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
+  'australia', 'new zealand', 'south africa',
+  'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',
+  'guyana', 'paraguay', 'peru', 'suriname', 'uruguay', 'venezuela', 'french guiana',
+  'ireland', 'germany', 'france', 'spain', 'italy', 'portugal', 'netherlands',
+  'holland', 'belgium', 'switzerland', 'austria', 'sweden', 'norway', 'denmark',
+  'finland', 'iceland', 'poland', 'czech republic', 'czechia', 'slovakia',
+  'hungary', 'romania', 'bulgaria', 'greece', 'croatia', 'slovenia', 'serbia',
+  'albania', 'bosnia', 'montenegro', 'macedonia', 'lithuania', 'latvia',
+  'estonia', 'luxembourg', 'malta', 'cyprus',
+];
+const FOLLOWUP_QUALIFIED_COUNTRIES_REGEX = new RegExp(
+  `\\b(${FOLLOWUP_QUALIFIED_COUNTRIES.map(c => c.replace(/[.]/g, '\\.').replace(/\s+/g, '\\s+')).join('|')})\\b`,
+  'i',
+);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -73,18 +93,21 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Skip if the visitor has actually shared a phone number already (defensive),
-      // OR if they're from a non-qualified country/age (per Mitch: no booking
-      // emails for unqualified leads). qualified === null means we haven't
-      // determined yet — those still get the fallback since the most common
-      // reason for null is "country not yet shared", not "explicitly bad".
+      // Only offer Calendly when ALL three are true:
+      //   (1) country_of_training is in a qualified region
+      //   (2) phone hasn't been shared yet (the whole point of the fallback)
+      //   (3) age is unknown OR within 30-60
+      // We compute this inline rather than reading visitors.qualified, because
+      // qualified only flips once both country and age are extracted — a
+      // non-qualified doctor who never shares age would slip through.
       const { data: visitor } = await supabase
         .from("visitors")
-        .select("phone, qualified")
+        .select("phone, country_of_training, age")
         .eq("id", conv.visitor_id)
         .maybeSingle();
 
-      if (visitor?.phone) {
+      const phoneNotGiven = !visitor?.phone || /^(n\/a|na|none|unknown|not provided|not available)$/i.test(String(visitor.phone).trim());
+      if (!phoneNotGiven) {
         await supabase
           .from("conversations")
           .update({ phone_followup_sent: true })
@@ -93,8 +116,14 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      if ((visitor as { qualified?: boolean } | null)?.qualified === false) {
-        console.log(`send-phone-followup: skipping unqualified visitor ${conv.visitor_id}`);
+      const country = visitor?.country_of_training || '';
+      const countryOk = !!country && FOLLOWUP_QUALIFIED_COUNTRIES_REGEX.test(country);
+      const ageRaw = visitor?.age ? String(visitor.age).trim() : '';
+      const ageNum = ageRaw ? parseInt(ageRaw, 10) : NaN;
+      const ageOk = !ageRaw || isNaN(ageNum) || (ageNum >= 30 && ageNum <= 60);
+
+      if (!countryOk || !ageOk) {
+        console.log(`send-phone-followup: skipping ${conv.visitor_id} (country=${countryOk}, ageOk=${ageOk})`);
         await supabase
           .from("conversations")
           .update({ phone_followup_sent: true })

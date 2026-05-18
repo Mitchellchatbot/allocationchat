@@ -8,6 +8,28 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Mirrors QUALIFIED_COUNTRIES in extract-visitor-info / zoho-export-leads.
+// Kept duplicated rather than shared because Deno edge functions in this repo
+// don't share modules. If you add a country to either of those files, add it
+// here too.
+const CALENDLY_QUALIFIED_COUNTRIES = [
+  'europe', 'south america', 'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada',
+  'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
+  'australia', 'new zealand', 'south africa',
+  'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',
+  'guyana', 'paraguay', 'peru', 'suriname', 'uruguay', 'venezuela', 'french guiana',
+  'ireland', 'germany', 'france', 'spain', 'italy', 'portugal', 'netherlands',
+  'holland', 'belgium', 'switzerland', 'austria', 'sweden', 'norway', 'denmark',
+  'finland', 'iceland', 'poland', 'czech republic', 'czechia', 'slovakia',
+  'hungary', 'romania', 'bulgaria', 'greece', 'croatia', 'slovenia', 'serbia',
+  'albania', 'bosnia', 'montenegro', 'macedonia', 'lithuania', 'latvia',
+  'estonia', 'luxembourg', 'malta', 'cyprus',
+];
+const CALENDLY_QUALIFIED_COUNTRIES_REGEX = new RegExp(
+  `\\b(${CALENDLY_QUALIFIED_COUNTRIES.map(c => c.replace(/[.]/g, '\\.').replace(/\s+/g, '\\s+')).join('|')})\\b`,
+  'i',
+);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -241,17 +263,26 @@ Deno.serve(async (req) => {
         /(rather not|don'?t want|do not want|not comfortable|prefer not|don'?t (wanna|want to)|won'?t share|not (sharing|share|giving))/i.test(reply) ||
         /(later|another time|not now|not yet|maybe later)/i.test(reply);
       if (looksLikeDecline) {
-        // Per Mitch: don't send Calendly to leads from non-qualified countries
-        // (or any explicitly-unqualified lead). qualified === false blocks;
-        // qualified === null (not yet determined) still sends, since the most
-        // common case is the doctor just hasn't shared their country yet.
-        const { data: visitorQ } = await supabase
+        // Per Mitch: only offer Calendly when ALL three are true:
+        //   (1) country_of_training is in a qualified region
+        //   (2) phone hasn't been shared yet (Calendly is a phone-fallback)
+        //   (3) age is unknown OR within 30-60
+        // We compute this inline rather than relying on visitors.qualified,
+        // because qualified only flips once BOTH country and age are extracted —
+        // so a non-qualified doctor who never shares age would slip through.
+        const { data: visitorRow } = await supabase
           .from("visitors")
-          .select("qualified")
+          .select("country_of_training, age, phone")
           .eq("id", visitorId)
           .maybeSingle();
-        if ((visitorQ as { qualified?: boolean } | null)?.qualified === false) {
-          console.log(`widget-save-message: skipping Calendly fallback for unqualified visitor ${visitorId}`);
+        const v = (visitorRow as { country_of_training?: string | null; age?: string | null; phone?: string | null } | null) || {};
+        const countryOk = !!v.country_of_training && CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(v.country_of_training);
+        const phoneNotGiven = !v.phone || /^(n\/a|na|none|unknown|not provided|not available)$/i.test(String(v.phone).trim());
+        const ageNum = v.age ? parseInt(String(v.age).trim(), 10) : NaN;
+        const ageOk = !v.age || isNaN(ageNum) || (ageNum >= 30 && ageNum <= 60);
+        const shouldOffer = countryOk && phoneNotGiven && ageOk;
+        if (!shouldOffer) {
+          console.log(`widget-save-message: skipping Calendly fallback for ${visitorId} (country=${countryOk}, phoneNotGiven=${phoneNotGiven}, ageOk=${ageOk})`);
           updatePayload.phone_followup_sent = true;
           updatePayload.phone_asked_at = null;
         } else {
