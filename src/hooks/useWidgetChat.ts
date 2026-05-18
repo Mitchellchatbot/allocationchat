@@ -66,12 +66,15 @@ interface WidgetChatConfig {
 }
 
 const DEFAULT_SETTINGS: PropertySettings = {
-  ai_response_delay_min_ms: 15000,
-  ai_response_delay_max_ms: 15000,
-  typing_indicator_min_ms: 1500,
-  typing_indicator_max_ms: 3000,
+  // Defaults tuned for snappier replies — doctors were dropping off mid-chat
+  // because the 60-WPM smart-typing plus 15s human-priority window made every
+  // reply feel ~10s+. Properties can still override via the dashboard.
+  ai_response_delay_min_ms: 300,
+  ai_response_delay_max_ms: 800,
+  typing_indicator_min_ms: 500,
+  typing_indicator_max_ms: 1000,
   smart_typing_enabled: true,
-  typing_wpm: 60,
+  typing_wpm: 150,
   max_ai_messages_before_escalation: 5,
   escalation_keywords: ['crisis', 'emergency', 'suicide', 'help me', 'urgent'],
   auto_escalation_enabled: true,
