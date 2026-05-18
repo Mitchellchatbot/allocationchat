@@ -18,7 +18,29 @@ interface ZohoConnection {
   api_domain: string;
   data_center: string;
   connected_at: string;
+  default_owner_id?: string | null;
 }
+
+// Zoho user ids provided by Mitch. Update this list when the team changes —
+// fetching it via the Zoho Users API would need an extra OAuth scope and a
+// reconnect, which isn't worth it for a list that changes rarely.
+const ZOHO_LEAD_OWNERS: Array<{ name: string; id: string }> = [
+  { name: 'Abraham', id: '5099121000004859001' },
+  { name: 'Ammar', id: '5099121000035203164' },
+  { name: 'Asser', id: '5099121000075391392' },
+  { name: 'Blessing', id: '5099121000039025001' },
+  { name: 'Hazem', id: '5099121000049518010' },
+  { name: 'Ishak', id: '5099121000098373008' },
+  { name: 'Islam', id: '5099121000039847145' },
+  { name: 'Mohammad Othman', id: '5099121000033205049' },
+  { name: 'Plinky Baay', id: '5099121000024401004' },
+  { name: 'Rodaina Thabit', id: '5099121000050947001' },
+  { name: 'Schalck Kleynhans', id: '5099121000096318008' },
+  { name: 'Sohaila Mohamed', id: '5099121000090546008' },
+  { name: 'Sumia Osman', id: '5099121000035754021' },
+  { name: 'Tim Magna', id: '5099121000047652086' },
+];
+const ZOHO_OWNER_DEFAULT = '__zoho_default__';
 
 interface ExportedLead {
   visitor_id: string;
@@ -37,11 +59,32 @@ export const ZohoSettings = ({ propertyId }: ZohoSettingsProps) => {
   const [dataCenter, setDataCenter] = useState('com');
   const [autoExportOnPhone, setAutoExportOnPhone] = useState(true);
   const [recentLeads, setRecentLeads] = useState<ExportedLead[]>([]);
+  const [savingOwner, setSavingOwner] = useState(false);
 
   useEffect(() => {
     fetchConnection();
     fetchRecentExports();
   }, [propertyId]);
+
+  const handleOwnerChange = async (value: string) => {
+    if (!connection) return;
+    const newOwnerId = value === ZOHO_OWNER_DEFAULT ? null : value;
+    setSavingOwner(true);
+    const { error } = await supabase
+      .from('zoho_connections' as any)
+      .update({ default_owner_id: newOwnerId })
+      .eq('property_id', propertyId);
+    setSavingOwner(false);
+    if (error) {
+      toast.error('Failed to update lead owner');
+      return;
+    }
+    setConnection({ ...connection, default_owner_id: newOwnerId });
+    const label = newOwnerId
+      ? ZOHO_LEAD_OWNERS.find(o => o.id === newOwnerId)?.name || 'selected user'
+      : 'the Zoho-connected account';
+    toast.success(`New leads will be assigned to ${label}`);
+  };
 
   const fetchRecentExports = async () => {
     // Pull the last 20 exported leads scoped to this property. Inner-joined
@@ -79,7 +122,7 @@ export const ZohoSettings = ({ propertyId }: ZohoSettingsProps) => {
     setLoading(true);
     const { data } = await supabase
       .from('zoho_connections' as any)
-      .select('id, api_domain, data_center, connected_at')
+      .select('id, api_domain, data_center, connected_at, default_owner_id')
       .eq('property_id', propertyId)
       .maybeSingle();
     setConnection((data as ZohoConnection) || null);
@@ -242,6 +285,30 @@ export const ZohoSettings = ({ propertyId }: ZohoSettingsProps) => {
             </div>
             <Switch checked={autoExportOnPhone} onCheckedChange={setAutoExportOnPhone} />
           </div>
+
+          {connection && (
+            <div className="mt-6">
+              <Label htmlFor="zoho-owner-select">Default lead owner</Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-2">
+                Every new lead the chatbot pushes to Zoho will be assigned to this user.
+              </p>
+              <Select
+                value={connection.default_owner_id || ZOHO_OWNER_DEFAULT}
+                onValueChange={handleOwnerChange}
+                disabled={savingOwner}
+              >
+                <SelectTrigger id="zoho-owner-select" className="w-full sm:w-72">
+                  <SelectValue placeholder="Select a lead owner" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ZOHO_OWNER_DEFAULT}>(Zoho default — connected account)</SelectItem>
+                  {ZOHO_LEAD_OWNERS.map(owner => (
+                    <SelectItem key={owner.id} value={owner.id}>{owner.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="mt-6 p-4 bg-muted/50 rounded-lg">
             <p className="text-sm font-medium">Qualification criteria</p>

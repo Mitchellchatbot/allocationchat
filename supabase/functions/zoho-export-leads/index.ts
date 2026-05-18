@@ -279,6 +279,7 @@ async function createZohoLead(
   apiDomain: string,
   accessToken: string,
   visitor: Record<string, string | null>,
+  defaultOwnerId?: string | null,
 ): Promise<{ id: string; status: number; duplicate?: boolean; error?: string } | { id: null; status: number; error?: string }> {
   const nameParts = (visitor.name || "").trim().split(/\s+/);
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : nameParts[0] || "Unknown";
@@ -305,6 +306,9 @@ async function createZohoLead(
     data: [{
       Last_Name: lastName,
       First_Name: firstName || undefined,
+      // Owner is the Zoho user id chosen on the property's Zoho settings page.
+      // If unset, Zoho falls back to whoever owns the OAuth token.
+      Owner: defaultOwnerId ? { id: defaultOwnerId } : undefined,
       Email: visitor.email || undefined,
       Phone: visitor.phone || undefined,
       // Two specialty fields on the user's Zoho: Specialty_New is a picklist
@@ -498,7 +502,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      let result = await createZohoLead(connection.api_domain, accessToken, visitor as Record<string, string | null>);
+      let result = await createZohoLead(connection.api_domain, accessToken, visitor as Record<string, string | null>, (connection as { default_owner_id?: string | null }).default_owner_id);
 
       // On 401 specifically: refresh token and retry once
       if (result.status === 401) {
@@ -506,7 +510,7 @@ Deno.serve(async (req) => {
         const newToken = await refreshAccessToken(supabase, connection as Record<string, string>);
         if (newToken) {
           accessToken = newToken;
-          result = await createZohoLead(connection.api_domain, accessToken, visitor as Record<string, string | null>);
+          result = await createZohoLead(connection.api_domain, accessToken, visitor as Record<string, string | null>, (connection as { default_owner_id?: string | null }).default_owner_id);
         }
       }
 
