@@ -182,18 +182,25 @@ Say something like: "I'd also love to help you book a quick call with one of our
 - Paste the URL as plain text. The widget will automatically render it as a "Click here to book a meeting" button — do NOT wrap it in markdown link syntax like [text](url).`;
     }
 
-    // Build system prompt — BASE is always included (immutable). Personality layers on top.
-    let systemPrompt = BASE_PROMPT + calendlyInstructions;
+    // Speed: first turn is just a one-sentence opener — Haiku is plenty
+    // capable and noticeably faster than Sonnet. Sonnet kicks in from the
+    // second turn onward, by which point prompt caching is hitting and the
+    // total latency is similar to Haiku anyway.
+    const isFirstTurn = validatedMessages.length <= 1;
+    const model = isFirstTurn ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6';
 
-    if (personalityPrompt) {
-      systemPrompt += `\n\nADDITIONAL PERSONALITY GUIDANCE:\n${personalityPrompt}`;
-    }
+    // Split the system prompt so the huge static recruiter playbook gets
+    // cached. Cache hit on turn 2+ ≈ 5× faster TTFT and cheaper. Two cache
+    // blocks: the immutable BASE_PROMPT (identical across every conversation
+    // in the system) and the per-property layer (calendly + personality +
+    // business context — stable for any doctor talking to the same property).
+    const perPropertyLayer = [calendlyInstructions, personalityPrompt ? `\n\nADDITIONAL PERSONALITY GUIDANCE:\n${personalityPrompt}` : '', propertyContext ? `\n\nBUSINESS INFORMATION (use this to answer questions about the organisation):\n${propertyContext}\n- Only share what is asked for. Do NOT volunteer all info at once.\n- If a piece of info is not listed above, say you'll connect them with someone who can help.` : ''].join('');
 
-    if (propertyContext) {
-      systemPrompt += `\n\nBUSINESS INFORMATION (use this to answer questions about the organisation):
-${propertyContext}
-- Only share what is asked for. Do NOT volunteer all info at once.
-- If a piece of info is not listed above, say you'll connect them with someone who can help.`;
+    const systemBlocks: Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }> = [
+      { type: 'text', text: BASE_PROMPT, cache_control: { type: 'ephemeral' } },
+    ];
+    if (perPropertyLayer.trim()) {
+      systemBlocks.push({ type: 'text', text: perPropertyLayer, cache_control: { type: 'ephemeral' } });
     }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -204,9 +211,9 @@ ${propertyContext}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model,
         max_tokens: 1024,
-        system: systemPrompt,
+        system: systemBlocks,
         messages: validatedMessages,
         stream: true,
       }),

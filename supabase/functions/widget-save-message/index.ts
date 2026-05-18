@@ -241,6 +241,20 @@ Deno.serve(async (req) => {
         /(rather not|don'?t want|do not want|not comfortable|prefer not|don'?t (wanna|want to)|won'?t share|not (sharing|share|giving))/i.test(reply) ||
         /(later|another time|not now|not yet|maybe later)/i.test(reply);
       if (looksLikeDecline) {
+        // Per Mitch: don't send Calendly to leads from non-qualified countries
+        // (or any explicitly-unqualified lead). qualified === false blocks;
+        // qualified === null (not yet determined) still sends, since the most
+        // common case is the doctor just hasn't shared their country yet.
+        const { data: visitorQ } = await supabase
+          .from("visitors")
+          .select("qualified")
+          .eq("id", visitorId)
+          .maybeSingle();
+        if ((visitorQ as { qualified?: boolean } | null)?.qualified === false) {
+          console.log(`widget-save-message: skipping Calendly fallback for unqualified visitor ${visitorId}`);
+          updatePayload.phone_followup_sent = true;
+          updatePayload.phone_asked_at = null;
+        } else {
         const { data: property } = await supabase
           .from("properties")
           .select("calendly_url")
@@ -268,6 +282,7 @@ Deno.serve(async (req) => {
           } else {
             console.error("widget-save-message: decline-fallback insert failed", declineInsertErr);
           }
+        }
         }
       }
     }

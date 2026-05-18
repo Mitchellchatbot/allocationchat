@@ -249,8 +249,14 @@ For booking_call_required: set this to true ONLY if the AI asked the doctor for 
       console.log(`Visitor ${visitorId} qualified: ${qualified}`);
     }
 
-    // Side effects: notifications + Zoho export queue (triggered when phone is captured)
-    if (updates.phone) {
+    // Side effects: notifications (phone only) + Zoho export queue.
+    // Per Mitch: a qualified doctor who shares email but not phone should still
+    // land in Zoho so the team can follow up via email. So enqueue on EITHER
+    // phone or email capture — the export function will still skip unqualified
+    // leads at run time, but qualified email-only leads now get exported.
+    const phoneCaptured = !!updates.phone;
+    const emailCaptured = !!updates.email;
+    if (phoneCaptured || emailCaptured) {
       try {
         const { data: conv } = await supabase
           .from('conversations')
@@ -264,25 +270,29 @@ For booking_call_required: set this to true ONLY if the AI asked the doctor for 
         // or enqueueing Zoho exports for preview chats would spam property owners and
         // push fake leads into their CRM.
         if (conv && !conv.is_test) {
-          dispatchPhoneNotifications(supabase, conv.property_id, conv.id, updates.name || visitor?.name || null, updates.phone);
+          if (phoneCaptured) {
+            dispatchPhoneNotifications(supabase, conv.property_id, conv.id, updates.name || visitor?.name || null, updates.phone!);
+          }
 
-          // Enqueue Zoho export — zoho-export-leads will skip unqualified leads
+          // Enqueue Zoho export — zoho-export-leads will skip unqualified leads.
+          // The unique constraint on (visitor_id) makes the second enqueue a noop
+          // when the doctor shares phone after email (or vice versa).
           const { error: qErr } = await supabase
             .from('zoho_export_queue')
             .insert({
               property_id: conv.property_id,
               visitor_id: visitorId,
               conversation_id: conv.id,
-              trigger_type: 'phone',
+              trigger_type: phoneCaptured ? 'phone' : 'email',
               status: 'pending',
               next_attempt_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
               updated_at: new Date().toISOString(),
             });
 
           if (qErr && (qErr as any).code !== '23505') console.error('Failed to enqueue Zoho export:', qErr);
-          else if (!qErr) console.log(`Enqueued Zoho export for visitor ${visitorId}`);
+          else if (!qErr) console.log(`Enqueued Zoho export for visitor ${visitorId} (trigger=${phoneCaptured ? 'phone' : 'email'})`);
         } else if (conv?.is_test) {
-          console.log(`Skipping phone side-effects for test conversation ${conv.id}`);
+          console.log(`Skipping contact-capture side-effects for test conversation ${conv.id}`);
         }
       } catch (sideEffectErr) {
         console.error('Error in side-effects:', sideEffectErr);

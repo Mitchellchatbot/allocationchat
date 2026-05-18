@@ -73,14 +73,28 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Skip if the visitor has actually shared a phone number already (defensive)
+      // Skip if the visitor has actually shared a phone number already (defensive),
+      // OR if they're from a non-qualified country/age (per Mitch: no booking
+      // emails for unqualified leads). qualified === null means we haven't
+      // determined yet — those still get the fallback since the most common
+      // reason for null is "country not yet shared", not "explicitly bad".
       const { data: visitor } = await supabase
         .from("visitors")
-        .select("phone")
+        .select("phone, qualified")
         .eq("id", conv.visitor_id)
         .maybeSingle();
 
       if (visitor?.phone) {
+        await supabase
+          .from("conversations")
+          .update({ phone_followup_sent: true })
+          .eq("id", conv.id);
+        skipped++;
+        continue;
+      }
+
+      if ((visitor as { qualified?: boolean } | null)?.qualified === false) {
+        console.log(`send-phone-followup: skipping unqualified visitor ${conv.visitor_id}`);
         await supabase
           .from("conversations")
           .update({ phone_followup_sent: true })
