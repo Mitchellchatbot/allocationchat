@@ -9,7 +9,7 @@ const corsHeaders = {
 // (not substring) — keep this list in sync with extract-visitor-info.
 const QUALIFIED_COUNTRIES = [
   'europe', 'south america',
-  'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada',
+  'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
   'australia', 'new zealand', 'south africa',
   'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',

@@ -13,7 +13,7 @@ const QUALIFIED_COUNTRIES = [
   // Region names (covers free-text answers like "trained in Europe")
   'europe', 'south america',
   // North America
-  'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada',
+  'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   // UK + constituents
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
   // Oceania + Africa

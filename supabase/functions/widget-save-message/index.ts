@@ -13,7 +13,7 @@ const corsHeaders = {
 // don't share modules. If you add a country to either of those files, add it
 // here too.
 const CALENDLY_QUALIFIED_COUNTRIES = [
-  'europe', 'south america', 'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada',
+  'europe', 'south america', 'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
   'australia', 'new zealand', 'south africa',
   'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',
@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
         // Country check — extracted country must be in the qualified regex.
         // If extraction hasn't run yet, transcript-scan for obvious bad words.
         const dbCountry = (v.country_of_training || '').toLowerCase();
-        const NON_QUALIFIED_KEYWORDS = /\b(india|pakistan|bangladesh|sri\s*lanka|nepal|afghanistan|iran|iraq|syria|lebanon|jordan|israel|palestine|saudi\s*arabia|uae|united\s*arab\s*emirates|qatar|kuwait|bahrain|oman|yemen|egypt|sudan|libya|morocco|algeria|tunisia|ethiopia|kenya|uganda|tanzania|nigeria|ghana|cameroon|zimbabwe|zambia|china|japan|korea|mongolia|taiwan|hong\s*kong|vietnam|thailand|indonesia|malaysia|singapore|philippines|myanmar|burma|cambodia|laos|russia|kazakhstan|uzbekistan|turkey|mexico|cuba|jamaica|haiti)\b/i;
+        const NON_QUALIFIED_KEYWORDS = /\b(india|pakistan|bangladesh|sri\s*lanka|nepal|afghanistan|iran|iraq|syria|lebanon|jordan|israel|palestine|saudi\s*arabia|uae|united\s*arab\s*emirates|qatar|kuwait|bahrain|oman|yemen|egypt|sudan|libya|morocco|algeria|tunisia|ethiopia|kenya|uganda|tanzania|nigeria|ghana|cameroon|zimbabwe|zambia|china|japan|korea|mongolia|taiwan|hong\s*kong|vietnam|thailand|indonesia|malaysia|singapore|philippines|myanmar|burma|cambodia|laos|russia|kazakhstan|uzbekistan|turkey|cuba|jamaica|haiti)\b/i;
         const dbCountryHardFail = dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
         const transcriptCountryHardFail = !dbCountry && NON_QUALIFIED_KEYWORDS.test(transcript);
         const countryHardFail = dbCountryHardFail || transcriptCountryHardFail;

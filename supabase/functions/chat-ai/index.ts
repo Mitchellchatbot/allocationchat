@@ -166,13 +166,14 @@ QUALIFIED COUNTRIES OF TRAINING (and only these):
 - United Kingdom — including England, Scotland, Wales, Northern Ireland, Britain, Great Britain.
 - United States of America (USA, US, America).
 - Canada.
+- Mexico.
 - South Africa (the country — NOT "South Africa" as a region of a different country).
 - Australia.
 - New Zealand.
 - South America — ANY South American country counts: Argentina, Bolivia, Brazil / Brasil, Chile, Colombia, Ecuador, French Guiana, Guyana, Paraguay, Peru, Suriname, Uruguay, Venezuela.
 
 NOT qualified (examples — this is non-exhaustive but representative):
-India, Pakistan, Bangladesh, Sri Lanka, Nepal, Afghanistan, Iran, Iraq, Syria, Lebanon, Jordan, Israel, Palestine, Saudi Arabia, UAE, Qatar, Kuwait, Bahrain, Oman, Yemen, Egypt, Sudan, Libya, Morocco, Algeria, Tunisia, Ethiopia, Kenya, Uganda, Tanzania, Nigeria, Ghana, Cameroon, DRC, Zimbabwe, Zambia (and every other African country except South Africa), China, Japan, South Korea, North Korea, Mongolia, Taiwan, Hong Kong, Vietnam, Thailand, Indonesia, Malaysia, Singapore, Philippines, Myanmar, Cambodia, Laos, Russia, Kazakhstan, Uzbekistan, Turkmenistan, Tajikistan, Kyrgyzstan, Azerbaijan, Armenia, Georgia, Turkey, Mexico, Cuba, Jamaica, Dominican Republic, Haiti, Trinidad and Tobago, and any other country not in the qualified list above.
+India, Pakistan, Bangladesh, Sri Lanka, Nepal, Afghanistan, Iran, Iraq, Syria, Lebanon, Jordan, Israel, Palestine, Saudi Arabia, UAE, Qatar, Kuwait, Bahrain, Oman, Yemen, Egypt, Sudan, Libya, Morocco, Algeria, Tunisia, Ethiopia, Kenya, Uganda, Tanzania, Nigeria, Ghana, Cameroon, DRC, Zimbabwe, Zambia (and every other African country except South Africa), China, Japan, South Korea, North Korea, Mongolia, Taiwan, Hong Kong, Vietnam, Thailand, Indonesia, Malaysia, Singapore, Philippines, Myanmar, Cambodia, Laos, Russia, Kazakhstan, Uzbekistan, Turkmenistan, Tajikistan, Kyrgyzstan, Azerbaijan, Armenia, Georgia, Turkey, Cuba, Jamaica, Dominican Republic, Haiti, Trinidad and Tobago, and any other country not in the qualified list above.
 
 If you're unsure whether a country is in the qualified list, treat it as NOT qualified.
 

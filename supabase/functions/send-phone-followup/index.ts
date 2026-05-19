@@ -13,7 +13,7 @@ const corsHeaders = {
 // Mirrors QUALIFIED_COUNTRIES in extract-visitor-info / zoho-export-leads /
 // widget-save-message. If you add a country to any of those, add it here too.
 const FOLLOWUP_QUALIFIED_COUNTRIES = [
-  'europe', 'south america', 'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada',
+  'europe', 'south america', 'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
   'australia', 'new zealand', 'south africa',
   'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',
