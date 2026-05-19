@@ -10,6 +10,8 @@ const corsHeaders = {
 const QUALIFIED_COUNTRIES = [
   'europe', 'south america',
   'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
+  'belize', 'costa rica', 'el salvador', 'guatemala', 'honduras', 'nicaragua', 'panama',
+  'japan', 'south korea', 'republic of korea', 'singapore',
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
   'australia', 'new zealand', 'south africa',
   'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',

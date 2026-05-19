@@ -14,6 +14,8 @@ const QUALIFIED_COUNTRIES = [
   'europe', 'south america',
   // North America
   'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
+  'belize', 'costa rica', 'el salvador', 'guatemala', 'honduras', 'nicaragua', 'panama',
+  'japan', 'south korea', 'republic of korea', 'singapore',
   // UK + constituents
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
   // Oceania + Africa
