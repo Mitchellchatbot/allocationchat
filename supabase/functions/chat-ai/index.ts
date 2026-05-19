@@ -174,11 +174,17 @@ QUALIFICATION AWARENESS:
       calendlyInstructions = `
 
 CALENDLY BOOKING:
-After you have collected the doctor's contact information (name and phone number), offer them the option to schedule a call at a time that works for them.
+After you have collected the doctor's contact information (name and phone number), offer them the option to schedule a call at a time that works for them — BUT ONLY IF THEY ARE QUALIFIED.
 Say something like: "I'd also love to help you book a quick call with one of our placement specialists. You can grab a time here: ${calendlyUrl}"
 - Only mention the booking link ONCE, after contact info has been collected (unless the doctor declined to share their phone number — in that case the link can also appear in the phone fallback flow described above).
 - Do not pressure them to book. If they decline, that's fine.
-- Paste the URL as plain text. The widget will automatically render it as a "Click here to book a meeting" button — do NOT wrap it in markdown link syntax like [text](url).`;
+- Paste the URL as plain text. The widget will automatically render it as a "Click here to book a meeting" button — do NOT wrap it in markdown link syntax like [text](url).
+
+WHEN TO NEVER OFFER THE BOOKING LINK (critical):
+- The doctor's country of training is NOT in the qualified list (Europe, UK, USA, Canada, South Africa, Australia, New Zealand, South America, including their constituent countries). Examples that should NOT receive the link: India, Pakistan, Bangladesh, Philippines, Nigeria, Egypt, Saudi Arabia, UAE, China, Russia, any Middle Eastern or Asian country.
+- The doctor's age has been shared and falls outside 30–60 years (so 29 or younger, or 61 or older). Even if they're from a qualified country, do NOT offer the booking link if their age is out of range.
+- The doctor is asking on behalf of someone else (a colleague, family member, etc.) who is themselves unqualified by the above rules.
+In all of those cases: thank them, finish collecting any remaining intake details for our files, and end gracefully without ever pasting the Calendly URL. Do not mention the booking link, do not hint that it exists. The placement team will follow up by email if a future fit emerges.`;
     }
 
     // Speed: first turn is just a one-sentence opener — Haiku is plenty
