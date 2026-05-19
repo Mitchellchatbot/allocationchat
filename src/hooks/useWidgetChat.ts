@@ -325,6 +325,7 @@ async function streamAIResponse({
   calendlyUrl,
   propertyContext,
   insuranceCollectionPrompt,
+  conversationId,
   signal,
 }: {
   messages: { role: 'user' | 'assistant'; content: string }[];
@@ -338,6 +339,7 @@ async function streamAIResponse({
   calendlyUrl?: string | null;
   propertyContext?: string | null;
   insuranceCollectionPrompt?: string | null;
+  conversationId?: string | null;
   signal?: AbortSignal;
 }) {
   try {
@@ -347,7 +349,7 @@ async function streamAIResponse({
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
       },
-      body: JSON.stringify({ messages, personalityPrompt, agentName, basePrompt, naturalLeadCaptureFields, calendlyUrl, propertyContext, insuranceCollectionPrompt }),
+      body: JSON.stringify({ messages, personalityPrompt, agentName, basePrompt, naturalLeadCaptureFields, calendlyUrl, propertyContext, insuranceCollectionPrompt, conversationId }),
       signal,
     });
 
@@ -937,6 +939,7 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
       await new Promise<void>((resolve) => {
         streamAIResponse({
           messages: aiHistory,
+          conversationId: conversationIdRef.current,
           personalityPrompt: respondingAgent?.personality_prompt,
           agentName: respondingAgent?.name,
           basePrompt: settings.ai_base_prompt,
@@ -1339,6 +1342,7 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
       await new Promise<void>((resolve) => {
         streamAIResponse({
           messages: freshHistory,
+          conversationId: conversationIdRef.current,
           personalityPrompt: respondingAgent?.personality_prompt,
           agentName: respondingAgent?.name,
           basePrompt: settings.ai_base_prompt,
@@ -1672,6 +1676,7 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
       if (settings.smart_typing_enabled) {
         await streamAIResponse({
           messages: conversationHistory,
+          conversationId: conversationIdRef.current,
           personalityPrompt: respondingAgent?.personality_prompt,
           agentName: respondingAgent?.name,
           basePrompt: settings.ai_base_prompt,
@@ -1683,6 +1688,14 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
           onDone: async () => {
             if (settings.drop_capitalization_enabled) aiContent = maybeDropCapitalization(aiContent);
             if (settings.drop_apostrophes_enabled) aiContent = maybeDropApostrophes(aiContent);
+
+            // chat-ai returns an empty stream when it deliberately skips
+            // (e.g. the hard-stop closer was already posted) — don't render
+            // an empty bubble or run any of the post-reveal counters.
+            if (!aiContent.trim()) {
+              setIsTyping(false);
+              return;
+            }
 
             setIsTyping(true);
             const typingStartTime = Date.now();
@@ -1726,6 +1739,7 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
 
         await streamAIResponse({
           messages: conversationHistory,
+          conversationId: conversationIdRef.current,
           personalityPrompt: respondingAgent?.personality_prompt,
           agentName: respondingAgent?.name,
           basePrompt: settings.ai_base_prompt,

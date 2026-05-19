@@ -1,4 +1,4 @@
-
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -34,8 +34,40 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const messages = Array.isArray(body.messages) ? body.messages : [];
-    const { propertyContext, personalityPrompt, agentName, calendlyUrl } = body;
+    const { propertyContext, personalityPrompt, agentName, calendlyUrl, conversationId } = body;
     const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+
+    // Hard-stop guard: if widget-save-message already posted the unqualified
+    // closer in the last few turns, skip the AI entirely. This is the
+    // server-side backstop for the same skip the widget does — covers the
+    // window where the widget's bundle hasn't redeployed yet OR where Realtime
+    // hadn't pushed the closer to the widget's state before chat-ai fired.
+    if (conversationId) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const sb = createClient(supabaseUrl, serviceKey);
+        const { data: lastAgent } = await sb
+          .from('messages')
+          .select('content')
+          .eq('conversation_id', conversationId)
+          .eq('sender_type', 'agent')
+          .order('sequence_number', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lastAgent && /specific eligibility criteria for the opportunities we handle/i.test((lastAgent as { content: string }).content)) {
+          console.log(`chat-ai: skipping — closer already posted on conversation ${conversationId}`);
+          // Return an empty SSE stream so the frontend's existing reader path
+          // completes naturally. The frontend's onDone with empty aiContent
+          // is now a no-op (see useWidgetChat).
+          return new Response('data: [DONE]\n\n', {
+            headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' },
+          });
+        }
+      } catch (e) {
+        console.error('chat-ai: hard-stop guard query failed (continuing):', e);
+      }
+    }
 
     if (!ANTHROPIC_API_KEY) {
       console.error('ANTHROPIC_API_KEY is not configured');
