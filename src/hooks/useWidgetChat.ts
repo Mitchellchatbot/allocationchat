@@ -466,6 +466,10 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
   // after a phone-decline. Consumed on the very next AI turn to suppress the
   // duplicate response from chat-ai.
   const phoneDeclineHandledRef = useRef(false);
+  // Set by widget-save-message when the server hard-stops an unqualified lead
+  // (age out of range or non-Western country) and posts the polite closer.
+  // Consumed on the next AI turn to skip chat-ai.
+  const hardStopHandledRef = useRef(false);
   const lastAutoReplyVisitorSeqRef = useRef<number>(0);
   // True while sendMessage's hybrid flow (generate→queue→wait→send) is in progress.
   // Prevents autoReplyIfPending from firing a duplicate AI message for the same visitor turn.
@@ -1166,6 +1170,9 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
             if (data.phone_decline_handled === true) {
               phoneDeclineHandledRef.current = true;
             }
+            if (data.hard_stop_handled === true) {
+              hardStopHandledRef.current = true;
+            }
           }
         }).catch(e => console.error('Failed to save visitor message:', e));
       }
@@ -1220,6 +1227,14 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
     // agent message; the AI will pick the conversation back up on the next turn.
     if (phoneDeclineHandledRef.current) {
       phoneDeclineHandledRef.current = false;
+      return;
+    }
+
+    // Skip AI if the server hard-stopped an unqualified lead. The polite
+    // closer was already posted as an agent message; let Realtime render it
+    // and don't fire chat-ai (which would otherwise keep asking questions).
+    if (hardStopHandledRef.current) {
+      hardStopHandledRef.current = false;
       return;
     }
 

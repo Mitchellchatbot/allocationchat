@@ -321,12 +321,86 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Hard-stop guard: if the visitor's age is out of range (>60 or <30) or
+    // their country of training is non-Western, post the boss's polite closer
+    // and tell the frontend to skip the AI for this turn. The chat-ai prompt
+    // has the same rule but Sonnet/Haiku don't always obey it on the first
+    // turn (especially when the doctor reveals their age in the very first
+    // message, before extraction has even run). This is the deterministic
+    // safety net.
+    const HARD_STOP_CLOSER = "Thank you so much for your interest. At the moment, we are working with specific eligibility criteria for the opportunities we handle. We truly appreciate your time and wish you all the best.";
+    let hardStopHandled = false;
+    if (senderType === "visitor") {
+      // Combine the new message with the recent transcript so we can spot age
+      // signals the extractor hasn't processed yet (it runs on a 2-min cron).
+      const { data: recentMsgs } = await supabase
+        .from("messages")
+        .select("content")
+        .eq("conversation_id", conversationId)
+        .eq("sender_type", "visitor")
+        .order("sequence_number", { ascending: false })
+        .limit(10);
+      const transcript = (recentMsgs || []).map((m: { content: string }) => m.content).join(" ") + " " + String(content);
+
+      const { data: vRow } = await supabase
+        .from("visitors")
+        .select("country_of_training, age")
+        .eq("id", visitorId)
+        .maybeSingle();
+      const v = (vRow as { country_of_training?: string | null; age?: string | null } | null) || {};
+
+      // Age — DB first, then transcript regex. Skip if the number is followed
+      // by a unit (kg/lbs/cm/etc.) to avoid false positives.
+      const dbAge = v.age ? parseInt(String(v.age).trim(), 10) : NaN;
+      let ageNum = isNaN(dbAge) ? NaN : dbAge;
+      if (isNaN(ageNum)) {
+        const ageMatch = transcript.match(/\b(\d{1,3})\s*(?:years?\s*old|yrs?\s*old|y\.?\s*o\.?|y\/o)\b/i)
+          || transcript.match(/\b(?:i'?m|im|age|aged)\s+(\d{1,3})\b(?!\s*(?:kg|kgs|kilograms?|lbs|pounds?|cm|inches|in|feet|ft|hours?|mins?|minutes?|seconds?|days?|weeks?|months?))/i);
+        if (ageMatch) ageNum = parseInt(ageMatch[1], 10);
+      }
+      const ageHardFail = !isNaN(ageNum) && (ageNum < 30 || ageNum > 60);
+
+      // Country — only trust the DB here. Scanning the transcript for country
+      // names is too risky (e.g. "I'm from Pakistan but trained in UK" would
+      // false-trigger). DB country is set by the extractor on country_of_training.
+      const dbCountry = (v.country_of_training || '').toLowerCase();
+      const countryHardFail = !!dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
+
+      if (ageHardFail || countryHardFail) {
+        // Don't double-post the closer if a previous turn already triggered it.
+        const { data: lastAgent } = await supabase
+          .from("messages")
+          .select("content, sequence_number")
+          .eq("conversation_id", conversationId)
+          .eq("sender_type", "agent")
+          .order("sequence_number", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const alreadyClosed = !!lastAgent && /specific eligibility criteria for the opportunities we handle/i.test((lastAgent as { content: string }).content);
+        if (!alreadyClosed) {
+          const { error: closerErr } = await supabase.from("messages").insert({
+            conversation_id: conversationId,
+            sender_id: "ai-bot",
+            sender_type: "agent",
+            content: HARD_STOP_CLOSER,
+            sequence_number: nextSeq + 1,
+          });
+          if (closerErr) {
+            console.error("widget-save-message: hard-stop closer insert failed", closerErr);
+          } else {
+            console.log(`widget-save-message: hard-stop closer posted for ${visitorId} (ageHardFail=${ageHardFail}, countryHardFail=${countryHardFail}, age=${ageNum}, country=${dbCountry})`);
+          }
+        }
+        hardStopHandled = true;
+      }
+    }
+
     // If the doctor is *replying* to a phone-number question and the reply
     // looks like a decline, post the Calendly fallback immediately rather than
     // waiting for the 60s silence cron. Mirrors the prompt instructions in
     // chat-ai for the phone-decline path so the booking link is guaranteed.
     let declineCalendlyPosted = false;
-    if (senderType === "visitor" && conv?.phone_asked_at) {
+    if (senderType === "visitor" && conv?.phone_asked_at && !hardStopHandled) {
       const reply = String(content).toLowerCase().trim();
       const looksLikeDecline =
         /\b(no|nope|nah|n\/a|na|none|skip|pass)\b/.test(reply) ||
@@ -407,7 +481,7 @@ Deno.serve(async (req) => {
       .update(updatePayload)
       .eq("id", conversationId);
 
-    return new Response(JSON.stringify({ success: true, sequence_number: nextSeq, conversationId, conversationCreated, ai_enabled: conv?.ai_enabled !== false, phone_decline_handled: declineCalendlyPosted }), {
+    return new Response(JSON.stringify({ success: true, sequence_number: nextSeq, conversationId, conversationCreated, ai_enabled: conv?.ai_enabled !== false, phone_decline_handled: declineCalendlyPosted, hard_stop_handled: hardStopHandled }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
