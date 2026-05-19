@@ -252,11 +252,25 @@ For booking_call_required: set this to true ONLY if the AI asked the doctor for 
     // Side effects: notifications (phone only) + Zoho export queue.
     // Per Mitch: a qualified doctor who shares email but not phone should still
     // land in Zoho so the team can follow up via email. So enqueue on EITHER
-    // phone or email capture — the export function will still skip unqualified
-    // leads at run time, but qualified email-only leads now get exported.
+    // phone or email capture this turn — the export function will still skip
+    // unqualified leads at run time, but qualified email-only leads now get
+    // exported.
+    //
+    // Safety-net: even if neither phone NOR email was captured THIS turn, if the
+    // visitor already has a contact in the DB and their country of training is
+    // qualified, enqueue anyway. Catches the case where the original
+    // on-capture enqueue failed silently or a later extraction would otherwise
+    // never re-enqueue. The unique constraint on visitor_id makes this safe.
     const phoneCaptured = !!updates.phone;
     const emailCaptured = !!updates.email;
-    if (phoneCaptured || emailCaptured) {
+    const mergedPhone = updates.phone || visitor?.phone;
+    const mergedEmail = updates.email || visitor?.email;
+    const hasContactInDb = !isPlaceholder(mergedPhone) || !isPlaceholder(mergedEmail);
+    const mergedCountry = (updates.country_of_training || visitor?.country_of_training || '').toLowerCase();
+    const countryQualifiedNow = !!mergedCountry && QUALIFIED_COUNTRIES_REGEX.test(mergedCountry);
+    const safetyNetReady = hasContactInDb && countryQualifiedNow;
+
+    if (phoneCaptured || emailCaptured || safetyNetReady) {
       try {
         const { data: conv } = await supabase
           .from('conversations')
@@ -276,21 +290,23 @@ For booking_call_required: set this to true ONLY if the AI asked the doctor for 
 
           // Enqueue Zoho export — zoho-export-leads will skip unqualified leads.
           // The unique constraint on (visitor_id) makes the second enqueue a noop
-          // when the doctor shares phone after email (or vice versa).
+          // when the doctor shares phone after email (or vice versa), or when
+          // the safety-net re-fires on a later turn.
+          const trigger = phoneCaptured ? 'phone' : (emailCaptured ? 'email' : 'safety_net');
           const { error: qErr } = await supabase
             .from('zoho_export_queue')
             .insert({
               property_id: conv.property_id,
               visitor_id: visitorId,
               conversation_id: conv.id,
-              trigger_type: phoneCaptured ? 'phone' : 'email',
+              trigger_type: trigger,
               status: 'pending',
               next_attempt_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
               updated_at: new Date().toISOString(),
             });
 
           if (qErr && (qErr as any).code !== '23505') console.error('Failed to enqueue Zoho export:', qErr);
-          else if (!qErr) console.log(`Enqueued Zoho export for visitor ${visitorId} (trigger=${phoneCaptured ? 'phone' : 'email'})`);
+          else if (!qErr) console.log(`Enqueued Zoho export for visitor ${visitorId} (trigger=${trigger})`);
         } else if (conv?.is_test) {
           console.log(`Skipping contact-capture side-effects for test conversation ${conv.id}`);
         }
