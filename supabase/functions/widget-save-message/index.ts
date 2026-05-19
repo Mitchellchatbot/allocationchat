@@ -208,11 +208,81 @@ Deno.serve(async (req) => {
 
     const sender_id = senderType === "visitor" ? visitorId : "ai-bot";
 
+    // Deterministic post-processing for AI messages. Sonnet doesn't always obey
+    // the prompt's "no em dashes" rule and occasionally pastes the Calendly
+    // URL to leads who should never see it — handle both here so the rules are
+    // enforced even when the model misses them.
+    let cleanedContent = String(content);
+    if (senderType === "agent" && sender_id === "ai-bot") {
+      // Strip em/en dashes; replace with comma+space or period+space to keep
+      // the sentence readable. Em (—) and en (–) both go.
+      cleanedContent = cleanedContent
+        .replace(/\s*—\s*/g, ", ")
+        .replace(/\s*–\s*/g, ", ");
+
+      // Calendly leak guard: if the model pasted the booking link, double-check
+      // the visitor's qualification. If they're a hard-no (non-qualified
+      // country we know about, or age outside 30-60), strip the URL and the
+      // surrounding sentence. We check both the DB (extraction may have run)
+      // and the recent transcript (age the doctor just stated this turn).
+      if (/calendly\.com\//i.test(cleanedContent)) {
+        const { data: vRow } = await supabase
+          .from("visitors")
+          .select("country_of_training, age")
+          .eq("id", visitorId)
+          .maybeSingle();
+        const v = (vRow as { country_of_training?: string | null; age?: string | null } | null) || {};
+
+        // Pull the last ~10 visitor messages so we can spot age signals the
+        // extractor hasn't processed yet (it runs every 2 min on a cron).
+        const { data: recentMsgs } = await supabase
+          .from("messages")
+          .select("content")
+          .eq("conversation_id", conversationId)
+          .eq("sender_type", "visitor")
+          .order("sequence_number", { ascending: false })
+          .limit(10);
+        const transcript = (recentMsgs || []).map((m: { content: string }) => m.content).join(" ");
+
+        // Age check — DB first, then transcript regex
+        const dbAge = v.age ? parseInt(String(v.age).trim(), 10) : NaN;
+        let ageNum = isNaN(dbAge) ? NaN : dbAge;
+        if (isNaN(ageNum)) {
+          // "66 years old", "66yo", "66 y/o", "I'm 66", "age 66"
+          const ageMatch = transcript.match(/\b(\d{2,3})\s*(?:years?\s*old|yrs?\s*old|y\.?\s*o\.?|y\/o)\b/i)
+            || transcript.match(/\b(?:i'?m|im|age|aged)\s+(\d{2,3})\b/i);
+          if (ageMatch) ageNum = parseInt(ageMatch[1], 10);
+        }
+        const ageHardFail = !isNaN(ageNum) && (ageNum < 30 || ageNum > 60);
+
+        // Country check — extracted country must be in the qualified regex.
+        // If extraction hasn't run yet, transcript-scan for obvious bad words.
+        const dbCountry = (v.country_of_training || '').toLowerCase();
+        const NON_QUALIFIED_KEYWORDS = /\b(india|pakistan|bangladesh|sri\s*lanka|nepal|afghanistan|iran|iraq|syria|lebanon|jordan|israel|palestine|saudi\s*arabia|uae|united\s*arab\s*emirates|qatar|kuwait|bahrain|oman|yemen|egypt|sudan|libya|morocco|algeria|tunisia|ethiopia|kenya|uganda|tanzania|nigeria|ghana|cameroon|zimbabwe|zambia|china|japan|korea|mongolia|taiwan|hong\s*kong|vietnam|thailand|indonesia|malaysia|singapore|philippines|myanmar|burma|cambodia|laos|russia|kazakhstan|uzbekistan|turkey|mexico|cuba|jamaica|haiti)\b/i;
+        const dbCountryHardFail = dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
+        const transcriptCountryHardFail = !dbCountry && NON_QUALIFIED_KEYWORDS.test(transcript);
+        const countryHardFail = dbCountryHardFail || transcriptCountryHardFail;
+
+        if (ageHardFail || countryHardFail) {
+          console.log(`widget-save-message: stripping Calendly leak for ${visitorId} (ageHardFail=${ageHardFail}, countryHardFail=${countryHardFail})`);
+          // Replace the sentence containing the Calendly URL with a polite closer.
+          // Anything before/after that sentence is kept so we don't lose other content.
+          cleanedContent = cleanedContent.replace(
+            /(?:[^.!?\n]*?https?:\/\/[^\s]*calendly\.com\/\S+[^.!?\n]*[.!?]?)/gi,
+            ''
+          ).trim();
+          if (!cleanedContent) {
+            cleanedContent = "Thank you so much for your interest. At the moment, we are working with specific eligibility criteria for the opportunities we handle. We truly appreciate your time and wish you all the best.";
+          }
+        }
+      }
+    }
+
     const { error: insertErr } = await supabase.from("messages").insert({
       conversation_id: conversationId,
       sender_id,
       sender_type: senderType,
-      content: String(content),
+      content: cleanedContent,
       sequence_number: nextSeq,
     });
 
