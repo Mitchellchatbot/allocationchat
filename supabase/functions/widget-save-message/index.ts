@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
             ''
           ).trim();
           if (!cleanedContent) {
-            cleanedContent = "Thank you so much for your interest. At the moment, we are working with specific eligibility criteria for the opportunities we handle. We truly appreciate your time and wish you all the best.";
+            cleanedContent = "Thank you so much for your interest. At the moment, we specialize in working with doctors who hold Western-trained qualifications. We truly appreciate your time and wish you all the best.";
           }
         }
       }
@@ -330,7 +330,7 @@ Deno.serve(async (req) => {
     // turn (especially when the doctor reveals their age in the very first
     // message, before extraction has even run). This is the deterministic
     // safety net.
-    const HARD_STOP_CLOSER = "Thank you so much for your interest. At the moment, we are working with specific eligibility criteria for the opportunities we handle. We truly appreciate your time and wish you all the best.";
+    const HARD_STOP_CLOSER = "Thank you so much for your interest. At the moment, we specialize in working with doctors who hold Western-trained qualifications. We truly appreciate your time and wish you all the best.";
     let hardStopHandled = false;
     if (senderType === "visitor") {
       // Combine the new message with the recent transcript so we can spot age
@@ -378,7 +378,7 @@ Deno.serve(async (req) => {
           .order("sequence_number", { ascending: false })
           .limit(1)
           .maybeSingle();
-        const alreadyClosed = !!lastAgent && /specific eligibility criteria for the opportunities we handle/i.test((lastAgent as { content: string }).content);
+        const alreadyClosed = !!lastAgent && /specialize in working with doctors who hold western[- ]trained qualifications/i.test((lastAgent as { content: string }).content);
         if (!alreadyClosed) {
           const { error: closerErr } = await supabase.from("messages").insert({
             conversation_id: conversationId,

@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
           .order('sequence_number', { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (lastAgent && /specific eligibility criteria for the opportunities we handle/i.test((lastAgent as { content: string }).content)) {
+        if (lastAgent && /specialize in working with doctors who hold western[- ]trained qualifications/i.test((lastAgent as { content: string }).content)) {
           console.log(`chat-ai: skipping — closer already posted on conversation ${conversationId}`);
           // Return an empty SSE stream so the frontend's existing reader path
           // completes naturally. The frontend's onDone with empty aiContent
@@ -224,7 +224,7 @@ WHAT TO DO WHEN A DOCTOR IS UNQUALIFIED (hard stop — non-negotiable):
 - Triggers: country of training is NOT in the qualified list, OR age is above 60, OR age is below 30 (when shared).
 - Stop the qualification flow IMMEDIATELY. Do NOT ask for any further fields (no phone, no email, no age if not already shared, no anything).
 - Do NOT offer the Calendly booking link. Do NOT mention a placement specialist.
-- Send this exact polite closer (one short message, you can lightly rephrase to fit context but keep the spirit): "Thank you so much for your interest. At the moment, we are working with specific eligibility criteria for the opportunities we handle. We truly appreciate your time and wish you all the best."
+- Send this exact polite closer (one short message, you can lightly rephrase to fit context but keep the spirit): "Thank you so much for your interest. At the moment, we specialize in working with doctors who hold Western-trained qualifications. We truly appreciate your time and wish you all the best."
 - After sending the closer, end gracefully. If the doctor continues to message, respond briefly and warmly but do not re-engage the qualification flow.
 - Never explicitly tell them they are "unqualified" or "rejected" — the closer above is the right phrasing.
 
