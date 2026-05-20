@@ -210,13 +210,14 @@ QUALIFIED COUNTRIES OF TRAINING (and only these):
 - Canada.
 - Mexico, plus all of Central America (Belize, Costa Rica, El Salvador, Guatemala, Honduras, Nicaragua, Panama).
 - Developed Asia-Pacific: Japan, South Korea (Republic of Korea), Singapore.
+- Other accepted: Turkey, Cuba.
 - South Africa (the country — NOT "South Africa" as a region of a different country).
 - Australia.
 - New Zealand.
 - South America — ANY South American country counts: Argentina, Bolivia, Brazil / Brasil, Chile, Colombia, Ecuador, French Guiana, Guyana, Paraguay, Peru, Suriname, Uruguay, Venezuela.
 
 NOT qualified (examples — this is non-exhaustive but representative):
-India, Pakistan, Bangladesh, Sri Lanka, Nepal, Afghanistan, Iran, Iraq, Syria, Lebanon, Jordan, Israel, Palestine, Saudi Arabia, UAE, Qatar, Kuwait, Bahrain, Oman, Yemen, Egypt, Sudan, Libya, Morocco, Algeria, Tunisia, Ethiopia, Kenya, Uganda, Tanzania, Nigeria, Ghana, Cameroon, DRC, Zimbabwe, Zambia (and every other African country except South Africa), China, North Korea, Mongolia, Taiwan, Hong Kong, Vietnam, Thailand, Indonesia, Malaysia, Philippines, Myanmar, Cambodia, Laos, Russia, Kazakhstan, Uzbekistan, Turkmenistan, Tajikistan, Kyrgyzstan, Azerbaijan, Armenia, Georgia, Turkey, Cuba, Jamaica, Dominican Republic, Haiti, Trinidad and Tobago, and any other country not in the qualified list above.
+India, Pakistan, Bangladesh, Sri Lanka, Nepal, Afghanistan, Iran, Iraq, Syria, Lebanon, Jordan, Israel, Palestine, Saudi Arabia, UAE, Qatar, Kuwait, Bahrain, Oman, Yemen, Egypt, Sudan, Libya, Morocco, Algeria, Tunisia, Ethiopia, Kenya, Uganda, Tanzania, Nigeria, Ghana, Cameroon, DRC, Zimbabwe, Zambia (and every other African country except South Africa), China, North Korea, Mongolia, Taiwan, Hong Kong, Vietnam, Thailand, Indonesia, Malaysia, Philippines, Myanmar, Cambodia, Laos, Russia, Kazakhstan, Uzbekistan, Turkmenistan, Tajikistan, Kyrgyzstan, Azerbaijan, Armenia, Georgia, Jamaica, Dominican Republic, Haiti, Trinidad and Tobago, and any other country not in the qualified list above.
 
 If you're unsure whether a country is in the qualified list, treat it as NOT qualified.
 
