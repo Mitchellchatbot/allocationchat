@@ -56,13 +56,31 @@ Deno.serve(async (req) => {
           .limit(1)
           .maybeSingle();
         if (lastAgent && /specialize in working with doctors who hold western[- ]trained qualifications/i.test((lastAgent as { content: string }).content)) {
-          console.log(`chat-ai: skipping — closer already posted on conversation ${conversationId}`);
-          // Return an empty SSE stream so the frontend's existing reader path
-          // completes naturally. The frontend's onDone with empty aiContent
-          // is now a no-op (see useWidgetChat).
-          return new Response('data: [DONE]\n\n', {
-            headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' },
-          });
+          // Closer was posted, BUT before skipping the AI we check whether
+          // the doctor has since revealed qualifying info (Western work
+          // experience or UAE qualification). If so, let the AI re-engage —
+          // the closer shouldn't permanently lock the chat.
+          const { data: recentVisitorMsgs } = await sb
+            .from('messages')
+            .select('content, sequence_number')
+            .eq('conversation_id', conversationId)
+            .eq('sender_type', 'visitor')
+            .order('sequence_number', { ascending: false })
+            .limit(5);
+          const transcriptAfter = (recentVisitorMsgs || []).map((m: { content: string }) => m.content).join(' ');
+          // Look for either a UAE mention or a Western place + work-context
+          // combination. Same heuristics widget-save-message uses for its
+          // re-qualifying signal, kept inline to avoid a shared module.
+          const QUALIFIED_PLACES = /\b(europe|south\s*america|united\s*states|usa|u\.s\.|u\.s\.a\.|america|canada|mexico|belize|costa\s*rica|el\s*salvador|guatemala|honduras|nicaragua|panama|japan|south\s*korea|republic\s*of\s*korea|singapore|turkey|cuba|uae|united\s*arab\s*emirates|emirates|dubai|abu\s*dhabi|united\s*kingdom|uk|great\s*britain|britain|england|scotland|wales|northern\s*ireland|australia|new\s*zealand|south\s*africa|argentina|bolivia|brazil|brasil|chile|colombia|ecuador|guyana|paraguay|peru|suriname|uruguay|venezuela|ireland|germany|france|spain|italy|portugal|netherlands|holland|belgium|switzerland|austria|sweden|norway|denmark|finland|iceland|poland|czech\s*republic|czechia|slovakia|hungary|romania|bulgaria|greece|croatia|slovenia|serbia|albania|bosnia|montenegro|macedonia|lithuania|latvia|estonia|luxembourg|malta|cyprus|london|cambridge|oxford|manchester|edinburgh|glasgow|dublin|new\s*york|nyc|boston|chicago|toronto|vancouver|sydney|melbourne|berlin|munich|paris|madrid|barcelona|rome|milan|amsterdam|zurich|vienna|stockholm|copenhagen)\b/i;
+          const WORK_CONTEXT = /\b(work(?:ing|ed)?|practic(?:e|ing|ed)|based|liv(?:e|ing|ed)|stationed|trained|train(?:ed|ing)?|residency|fellowship|years?\s+(?:in|at)|months?\s+(?:in|at)|since|been\s+(?:in|at|working|practicing))\b/i;
+          const hasReQualifying = QUALIFIED_PLACES.test(transcriptAfter) && WORK_CONTEXT.test(transcriptAfter);
+          if (!hasReQualifying) {
+            console.log(`chat-ai: skipping — closer already posted on conversation ${conversationId} and no re-qualifying signal`);
+            return new Response('data: [DONE]\n\n', {
+              headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' },
+            });
+          }
+          console.log(`chat-ai: closer was posted but doctor revealed re-qualifying signal; allowing AI to re-engage on conversation ${conversationId}`);
         }
       } catch (e) {
         console.error('chat-ai: hard-stop guard query failed (continuing):', e);
@@ -211,15 +229,20 @@ QUALIFIED COUNTRIES OF TRAINING (and only these):
 - Mexico, plus all of Central America (Belize, Costa Rica, El Salvador, Guatemala, Honduras, Nicaragua, Panama).
 - Developed Asia-Pacific: Japan, South Korea (Republic of Korea), Singapore.
 - Other accepted: Turkey, Cuba.
+- UAE-LOCAL specialty qualification: doctors who obtained their specialty qualification IN the UAE are accepted (this is the only Middle East country in the allow list, and only when the qualification itself is UAE-issued).
+- EXPERIENCE-BASED QUALIFICATION: a doctor whose original country of training is NOT in the allow list still qualifies if they have substantial work/practice experience (typically a few years or more) in a Western country. Examples: "I'm Egyptian but I've been working as a consultant in Cambridge for 5 years" → qualified. "I trained in India but I've been a registrar in Sydney since 2021" → qualified. Treat any clear mention of working/practicing/being based in a UK/USA/Canada/Australia/NZ/Europe city or country for an extended period as qualifying. If the experience is brief (months, "just visited", etc.) or vague, treat as not qualified.
 - South Africa (the country — NOT "South Africa" as a region of a different country).
 - Australia.
 - New Zealand.
 - South America — ANY South American country counts: Argentina, Bolivia, Brazil / Brasil, Chile, Colombia, Ecuador, French Guiana, Guyana, Paraguay, Peru, Suriname, Uruguay, Venezuela.
 
 NOT qualified (examples — this is non-exhaustive but representative):
-India, Pakistan, Bangladesh, Sri Lanka, Nepal, Afghanistan, Iran, Iraq, Syria, Lebanon, Jordan, Israel, Palestine, Saudi Arabia, UAE, Qatar, Kuwait, Bahrain, Oman, Yemen, Egypt, Sudan, Libya, Morocco, Algeria, Tunisia, Ethiopia, Kenya, Uganda, Tanzania, Nigeria, Ghana, Cameroon, DRC, Zimbabwe, Zambia (and every other African country except South Africa), China, North Korea, Mongolia, Taiwan, Hong Kong, Vietnam, Thailand, Indonesia, Malaysia, Philippines, Myanmar, Cambodia, Laos, Russia, Kazakhstan, Uzbekistan, Turkmenistan, Tajikistan, Kyrgyzstan, Azerbaijan, Armenia, Georgia, Jamaica, Dominican Republic, Haiti, Trinidad and Tobago, and any other country not in the qualified list above.
+India, Pakistan, Bangladesh, Sri Lanka, Nepal, Afghanistan, Iran, Iraq, Syria, Lebanon, Jordan, Israel, Palestine, Saudi Arabia, Qatar, Kuwait, Bahrain, Oman, Yemen, Egypt, Sudan, Libya, Morocco, Algeria, Tunisia, Ethiopia, Kenya, Uganda, Tanzania, Nigeria, Ghana, Cameroon, DRC, Zimbabwe, Zambia (and every other African country except South Africa), China, North Korea, Mongolia, Taiwan, Hong Kong, Vietnam, Thailand, Indonesia, Malaysia, Philippines, Myanmar, Cambodia, Laos, Russia, Kazakhstan, Uzbekistan, Turkmenistan, Tajikistan, Kyrgyzstan, Azerbaijan, Armenia, Georgia, Jamaica, Dominican Republic, Haiti, Trinidad and Tobago, and any other country not in the qualified list above.
 
 If you're unsure whether a country is in the qualified list, treat it as NOT qualified.
+
+IF THE CLOSER WAS ALREADY SENT BUT THE DOCTOR THEN REVEALS QUALIFYING INFO:
+- It's possible an earlier turn triggered the polite closer because the doctor's country of training looked non-Western. If the doctor responds with new info that brings them into the qualified set (e.g., "I've been working in London for 5 years", "I got my specialty in the UAE", "actually I also did my fellowship in Boston"), re-engage warmly: "Apologies, I'd love to continue then! [next intake question]." Don't apologize formally for the closer — just acknowledge and move on with the standard intake flow from wherever you left off.
 
 WHAT TO DO WHEN A DOCTOR IS UNQUALIFIED (hard stop — non-negotiable):
 - Triggers: country of training is NOT in the qualified list, OR age is above 60, OR age is below 30 (when shared).

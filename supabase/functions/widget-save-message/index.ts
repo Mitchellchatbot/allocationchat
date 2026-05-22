@@ -16,6 +16,7 @@ const CALENDLY_QUALIFIED_COUNTRIES = [
   'europe', 'south america', 'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   'belize', 'costa rica', 'el salvador', 'guatemala', 'honduras', 'nicaragua', 'panama',
   'japan', 'south korea', 'republic of korea', 'singapore', 'turkey', 'cuba',
+  'uae', 'united arab emirates', 'emirates', 'dubai', 'abu dhabi',
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
   'australia', 'new zealand', 'south africa',
   'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',
@@ -31,6 +32,18 @@ const CALENDLY_QUALIFIED_COUNTRIES_REGEX = new RegExp(
   `\\b(${CALENDLY_QUALIFIED_COUNTRIES.map(c => c.replace(/[.]/g, '\\.').replace(/\s+/g, '\\s+')).join('|')})\\b`,
   'i',
 );
+
+// Major Western cities — used as a "re-qualifying signal" when a doctor
+// mentions they work / practice / live in one of these. A doctor saying
+// "I've been working in Cambridge for 5 years" should be treated as
+// potentially-qualified even if their country_of_training is something else,
+// because they have Western work experience.
+const WESTERN_CITIES_REGEX = /\b(london|cambridge|oxford|manchester|edinburgh|glasgow|dublin|birmingham|leeds|liverpool|sheffield|bristol|cardiff|belfast|new\s*york|nyc|boston|chicago|los\s*angeles|san\s*francisco|seattle|washington\s*dc|philadelphia|houston|atlanta|miami|denver|toronto|vancouver|montreal|ottawa|calgary|sydney|melbourne|brisbane|perth|adelaide|auckland|wellington|berlin|munich|hamburg|frankfurt|paris|lyon|marseille|madrid|barcelona|rome|milan|naples|amsterdam|rotterdam|brussels|zurich|geneva|vienna|prague|stockholm|copenhagen|oslo|helsinki|lisbon|warsaw|athens)\b/i;
+
+// Phrases suggesting working/practicing/living context — combined with a
+// Western country or city mention, signals that the doctor has Western
+// experience even if their original training was elsewhere.
+const WORK_EXPERIENCE_CONTEXT_REGEX = /\b(work(?:ing|ed)?|practic(?:e|ing|ed)|based|liv(?:e|ing|ed)|stationed|trained|train(?:ed|ing)?|residency|fellowship|years?\s+(?:in|at)|months?\s+(?:in|at)|since|been\s+(?:in|at|working|practicing))\b/i;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -260,7 +273,7 @@ Deno.serve(async (req) => {
         // Country check — extracted country must be in the qualified regex.
         // If extraction hasn't run yet, transcript-scan for obvious bad words.
         const dbCountry = (v.country_of_training || '').toLowerCase();
-        const NON_QUALIFIED_KEYWORDS = /\b(india|pakistan|bangladesh|sri\s*lanka|nepal|afghanistan|iran|iraq|syria|lebanon|jordan|israel|palestine|saudi\s*arabia|uae|united\s*arab\s*emirates|qatar|kuwait|bahrain|oman|yemen|egypt|sudan|libya|morocco|algeria|tunisia|ethiopia|kenya|uganda|tanzania|nigeria|ghana|cameroon|zimbabwe|zambia|china|north\s*korea|mongolia|taiwan|hong\s*kong|vietnam|thailand|indonesia|malaysia|philippines|myanmar|burma|cambodia|laos|russia|kazakhstan|uzbekistan|jamaica|haiti)\b/i;
+        const NON_QUALIFIED_KEYWORDS = /\b(india|pakistan|bangladesh|sri\s*lanka|nepal|afghanistan|iran|iraq|syria|lebanon|jordan|israel|palestine|saudi\s*arabia|qatar|kuwait|bahrain|oman|yemen|egypt|sudan|libya|morocco|algeria|tunisia|ethiopia|kenya|uganda|tanzania|nigeria|ghana|cameroon|zimbabwe|zambia|china|north\s*korea|mongolia|taiwan|hong\s*kong|vietnam|thailand|indonesia|malaysia|philippines|myanmar|burma|cambodia|laos|russia|kazakhstan|uzbekistan|jamaica|haiti)\b/i;
         const dbCountryHardFail = dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
         const transcriptCountryHardFail = !dbCountry && NON_QUALIFIED_KEYWORDS.test(transcript);
         const countryHardFail = dbCountryHardFail || transcriptCountryHardFail;
@@ -366,7 +379,23 @@ Deno.serve(async (req) => {
       // names is too risky (e.g. "I'm from Pakistan but trained in UK" would
       // false-trigger). DB country is set by the extractor on country_of_training.
       const dbCountry = (v.country_of_training || '').toLowerCase();
-      const countryHardFail = !!dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
+      let countryHardFail = !!dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
+
+      // Re-qualifying signal: if the country looks unqualified BUT the
+      // transcript mentions Western work experience (a qualified country/city
+      // alongside working/practicing/living context) OR UAE qualification
+      // context, treat as potentially qualified and let the AI handle the
+      // nuance instead of hard-stopping. Catches the "British Egyptian working
+      // in Cambridge for 5 years" case.
+      if (countryHardFail) {
+        const hasQualifiedPlaceMention = CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(transcript) || WESTERN_CITIES_REGEX.test(transcript);
+        const hasWorkContext = WORK_EXPERIENCE_CONTEXT_REGEX.test(transcript);
+        const hasReQualifyingSignal = hasQualifiedPlaceMention && hasWorkContext;
+        if (hasReQualifyingSignal) {
+          console.log(`widget-save-message: re-qualifying signal found in transcript for ${visitorId}; not hard-stopping despite dbCountry=${dbCountry}`);
+          countryHardFail = false;
+        }
+      }
 
       if (ageHardFail || countryHardFail) {
         // Don't double-post the closer if a previous turn already triggered it.

@@ -12,6 +12,7 @@ const QUALIFIED_COUNTRIES = [
   'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   'belize', 'costa rica', 'el salvador', 'guatemala', 'honduras', 'nicaragua', 'panama',
   'japan', 'south korea', 'republic of korea', 'singapore', 'turkey', 'cuba',
+  'uae', 'united arab emirates', 'emirates', 'dubai', 'abu dhabi',
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
   'australia', 'new zealand', 'south africa',
   'argentina', 'bolivia', 'brazil', 'brasil', 'chile', 'colombia', 'ecuador',
