@@ -1947,7 +1947,28 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
             // the most-recent agent message, drop the duplicate.
             if (!isHumanAgent) {
               const last = prev[prev.length - 1];
-              if (last && last.sender_type === 'agent' && last.content === newMsg.content) return prev;
+              if (last && last.sender_type === 'agent') {
+                if (last.content === newMsg.content) return prev;
+                // Server-side post-processing (Calendly stripping, em-dash
+                // normalisation) means the canonical DB version can differ
+                // slightly from what the optimistic render placed locally.
+                // If the new DB version is essentially a shortened/cleaned
+                // version of the last optimistic message, replace in place
+                // rather than rendering two bubbles for one logical reply.
+                const lastTrim = last.content.trim().replace(/\s+/g, ' ');
+                const newTrim = newMsg.content.trim().replace(/\s+/g, ' ');
+                const lastHadCalendly = /calendly\.com\//i.test(lastTrim);
+                const newHasCalendly = /calendly\.com\//i.test(newTrim);
+                if (lastHadCalendly && !newHasCalendly && newTrim.length > 15 && lastTrim.startsWith(newTrim)) {
+                  return prev.map(m => m === last ? { ...m, content: newMsg.content, id: newMsg.id } : m);
+                }
+                // Em-dash / en-dash stripping: same content, just punctuation
+                // swapped. Normalize and compare.
+                const normalize = (s: string) => s.replace(/[—–]/g, ',').replace(/,\s+/g, ', ').trim();
+                if (normalize(lastTrim) === normalize(newTrim)) {
+                  return prev.map(m => m === last ? { ...m, content: newMsg.content, id: newMsg.id } : m);
+                }
+              }
             }
             return [...prev, newMsg];
           });

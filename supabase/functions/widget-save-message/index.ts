@@ -276,7 +276,20 @@ Deno.serve(async (req) => {
         const NON_QUALIFIED_KEYWORDS = /\b(india|pakistan|bangladesh|sri\s*lanka|nepal|afghanistan|iran|iraq|syria|lebanon|jordan|israel|palestine|saudi\s*arabia|qatar|kuwait|bahrain|oman|yemen|egypt|sudan|libya|morocco|algeria|tunisia|ethiopia|kenya|uganda|tanzania|nigeria|ghana|cameroon|zimbabwe|zambia|china|north\s*korea|mongolia|taiwan|hong\s*kong|vietnam|thailand|indonesia|malaysia|philippines|myanmar|burma|cambodia|laos|russia|kazakhstan|uzbekistan|jamaica|haiti)\b/i;
         const dbCountryHardFail = dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
         const transcriptCountryHardFail = !dbCountry && NON_QUALIFIED_KEYWORDS.test(transcript);
-        const countryHardFail = dbCountryHardFail || transcriptCountryHardFail;
+        let countryHardFail = dbCountryHardFail || transcriptCountryHardFail;
+
+        // Re-qualifying signal: same logic the hard-stop guard uses. If the
+        // transcript shows Western work experience (qualified place + work
+        // context) the doctor is in fact qualified despite their training
+        // country looking bad — don't strip the AI's Calendly link.
+        if (countryHardFail) {
+          const hasQualifiedPlaceMention = CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(transcript) || WESTERN_CITIES_REGEX.test(transcript);
+          const hasWorkContext = WORK_EXPERIENCE_CONTEXT_REGEX.test(transcript);
+          if (hasQualifiedPlaceMention && hasWorkContext) {
+            console.log(`widget-save-message: Calendly leak guard skipping strip for ${visitorId} (re-qualifying signal in transcript)`);
+            countryHardFail = false;
+          }
+        }
 
         if (ageHardFail || countryHardFail) {
           console.log(`widget-save-message: stripping Calendly leak for ${visitorId} (ageHardFail=${ageHardFail}, countryHardFail=${countryHardFail})`);
