@@ -43,7 +43,7 @@ const WESTERN_CITIES_REGEX = /\b(london|cambridge|oxford|manchester|edinburgh|gl
 // Phrases suggesting working/practicing/living context — combined with a
 // Western country or city mention, signals that the doctor has Western
 // experience even if their original training was elsewhere.
-const WORK_EXPERIENCE_CONTEXT_REGEX = /\b(work(?:ing|ed)?|practic(?:e|ing|ed)|based|liv(?:e|ing|ed)|stationed|trained|train(?:ed|ing)?|residency|fellowship|years?\s+(?:in|at)|months?\s+(?:in|at)|since|been\s+(?:in|at|working|practicing))\b/i;
+const WORK_EXPERIENCE_CONTEXT_REGEX = /\b(work(?:ing|ed)?|practic(?:e|ing|ed)|based|liv(?:e|ing|ed)|stationed|trained|train(?:ed|ing)?|residen(?:t|cy|ce|ts)|resid(?:e|ing|ed)|domiciled|fellowship|consultant|registrar|specialist|attending|years?\s+(?:in|at)|months?\s+(?:in|at)|since|been\s+(?:in|at|working|practicing|living|residing)|currently\s+(?:in|at|based|working|living|residing)|moved\s+to|relocated\s+to|right\s+now|at\s+the\s+moment|from\s+\w+)\b/i;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
