@@ -287,7 +287,7 @@ Deno.serve(async (req) => {
             ''
           ).trim();
           if (!cleanedContent) {
-            cleanedContent = "Thank you so much for your interest. At the moment, we specialize in working with doctors who hold Western-trained qualifications. We truly appreciate your time and wish you all the best.";
+            cleanedContent = "Thank you so much for your interest! Unfortunately, at the moment we specialize in working with doctors who hold Western-trained qualifications, so it's not something we'd be able to help with right now. We truly appreciate your time and wish you all the best.";
           }
         }
       }
@@ -343,7 +343,7 @@ Deno.serve(async (req) => {
     // turn (especially when the doctor reveals their age in the very first
     // message, before extraction has even run). This is the deterministic
     // safety net.
-    const HARD_STOP_CLOSER = "Thank you so much for your interest. At the moment, we specialize in working with doctors who hold Western-trained qualifications. We truly appreciate your time and wish you all the best.";
+    const HARD_STOP_CLOSER = "Thank you so much for your interest! Unfortunately, at the moment we specialize in working with doctors who hold Western-trained qualifications, so it's not something we'd be able to help with right now. We truly appreciate your time and wish you all the best.";
     let hardStopHandled = false;
     if (senderType === "visitor") {
       // Combine the new message with the recent transcript so we can spot age
@@ -399,6 +399,11 @@ Deno.serve(async (req) => {
 
       if (ageHardFail || countryHardFail) {
         // Don't double-post the closer if a previous turn already triggered it.
+        // Per Mitch: after the closer, we keep replying briefly and warmly
+        // (no permanent lockout) — so only suppress the AI on the turn we
+        // actually post the closer. If the closer is already there, let the
+        // AI respond to the doctor's follow-up naturally (the prompt has the
+        // "stay polite, don't re-engage qualification" guidance for that).
         const { data: lastAgent } = await supabase
           .from("messages")
           .select("content, sequence_number")
@@ -420,9 +425,12 @@ Deno.serve(async (req) => {
             console.error("widget-save-message: hard-stop closer insert failed", closerErr);
           } else {
             console.log(`widget-save-message: hard-stop closer posted for ${visitorId} (ageHardFail=${ageHardFail}, countryHardFail=${countryHardFail}, age=${ageNum}, country=${dbCountry})`);
+            // Only skip the AI for THIS turn — the one where we just posted
+            // the closer. Subsequent turns from the same doctor get the
+            // normal AI response so the chat doesn't feel dead.
+            hardStopHandled = true;
           }
         }
-        hardStopHandled = true;
       }
     }
 

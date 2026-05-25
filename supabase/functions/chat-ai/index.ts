@@ -49,38 +49,39 @@ Deno.serve(async (req) => {
         const sb = createClient(supabaseUrl, serviceKey);
         const { data: lastAgent } = await sb
           .from('messages')
-          .select('content')
+          .select('content, sequence_number')
           .eq('conversation_id', conversationId)
           .eq('sender_type', 'agent')
           .order('sequence_number', { ascending: false })
           .limit(1)
           .maybeSingle();
         if (lastAgent && /specialize in working with doctors who hold western[- ]trained qualifications/i.test((lastAgent as { content: string }).content)) {
-          // Closer was posted, BUT before skipping the AI we check whether
-          // the doctor has since revealed qualifying info (Western work
-          // experience or UAE qualification). If so, let the AI re-engage —
-          // the closer shouldn't permanently lock the chat.
-          const { data: recentVisitorMsgs } = await sb
+          // Closer is the most recent agent message. Two sub-cases:
+          //
+          // (a) No visitor message has come in after the closer → the closer
+          //     was JUST posted this turn. A stale frontend might still call
+          //     chat-ai here; skip to avoid duplicating the closer.
+          //
+          // (b) The doctor has messaged after the closer → let the AI reply
+          //     normally. Per Mitch: we don't lock the chat. The prompt has
+          //     guidance to stay polite and not re-engage qualification
+          //     unless the doctor reveals re-qualifying info.
+          const closerSeq = (lastAgent as { sequence_number: number }).sequence_number;
+          const { data: laterVisitor } = await sb
             .from('messages')
-            .select('content, sequence_number')
+            .select('id')
             .eq('conversation_id', conversationId)
             .eq('sender_type', 'visitor')
-            .order('sequence_number', { ascending: false })
-            .limit(5);
-          const transcriptAfter = (recentVisitorMsgs || []).map((m: { content: string }) => m.content).join(' ');
-          // Look for either a UAE mention or a Western place + work-context
-          // combination. Same heuristics widget-save-message uses for its
-          // re-qualifying signal, kept inline to avoid a shared module.
-          const QUALIFIED_PLACES = /\b(europe|south\s*america|united\s*states|usa|u\.s\.|u\.s\.a\.|america|canada|mexico|belize|costa\s*rica|el\s*salvador|guatemala|honduras|nicaragua|panama|japan|south\s*korea|republic\s*of\s*korea|singapore|turkey|cuba|uae|united\s*arab\s*emirates|emirates|dubai|abu\s*dhabi|united\s*kingdom|uk|great\s*britain|britain|england|scotland|wales|northern\s*ireland|australia|new\s*zealand|south\s*africa|argentina|bolivia|brazil|brasil|chile|colombia|ecuador|guyana|paraguay|peru|suriname|uruguay|venezuela|ireland|germany|france|spain|italy|portugal|netherlands|holland|belgium|switzerland|austria|sweden|norway|denmark|finland|iceland|poland|czech\s*republic|czechia|slovakia|hungary|romania|bulgaria|greece|croatia|slovenia|serbia|albania|bosnia|montenegro|macedonia|lithuania|latvia|estonia|luxembourg|malta|cyprus|london|cambridge|oxford|manchester|edinburgh|glasgow|dublin|new\s*york|nyc|boston|chicago|toronto|vancouver|sydney|melbourne|berlin|munich|paris|madrid|barcelona|rome|milan|amsterdam|zurich|vienna|stockholm|copenhagen)\b/i;
-          const WORK_CONTEXT = /\b(work(?:ing|ed)?|practic(?:e|ing|ed)|based|liv(?:e|ing|ed)|stationed|trained|train(?:ed|ing)?|residen(?:t|cy|ce|ts)|resid(?:e|ing|ed)|domiciled|fellowship|consultant|registrar|specialist|attending|years?\s+(?:in|at)|months?\s+(?:in|at)|since|been\s+(?:in|at|working|practicing|living|residing)|currently\s+(?:in|at|based|working|living|residing)|moved\s+to|relocated\s+to|right\s+now|at\s+the\s+moment|from\s+\w+)\b/i;
-          const hasReQualifying = QUALIFIED_PLACES.test(transcriptAfter) && WORK_CONTEXT.test(transcriptAfter);
-          if (!hasReQualifying) {
-            console.log(`chat-ai: skipping — closer already posted on conversation ${conversationId} and no re-qualifying signal`);
+            .gt('sequence_number', closerSeq)
+            .limit(1)
+            .maybeSingle();
+          if (!laterVisitor) {
+            console.log(`chat-ai: closer just posted on ${conversationId} and no later visitor message; skipping to avoid duplicate`);
             return new Response('data: [DONE]\n\n', {
               headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' },
             });
           }
-          console.log(`chat-ai: closer was posted but doctor revealed re-qualifying signal; allowing AI to re-engage on conversation ${conversationId}`);
+          console.log(`chat-ai: closer was posted but doctor messaged after; letting AI respond on conversation ${conversationId}`);
         }
       } catch (e) {
         console.error('chat-ai: hard-stop guard query failed (continuing):', e);
@@ -241,14 +242,18 @@ India, Pakistan, Bangladesh, Sri Lanka, Nepal, Afghanistan, Iran, Iraq, Syria, L
 
 If you're unsure whether a country is in the qualified list, treat it as NOT qualified.
 
-IF THE CLOSER WAS ALREADY SENT BUT THE DOCTOR THEN REVEALS QUALIFYING INFO:
-- It's possible an earlier turn triggered the polite closer because the doctor's country of training looked non-Western. If the doctor responds with new info that brings them into the qualified set (e.g., "I've been working in London for 5 years", "I got my specialty in the UAE", "actually I also did my fellowship in Boston"), re-engage warmly: "Apologies, I'd love to continue then! [next intake question]." Don't apologize formally for the closer — just acknowledge and move on with the standard intake flow from wherever you left off.
+IF THE CLOSER WAS ALREADY SENT AND THE DOCTOR KEEPS MESSAGING:
+- The chat is NOT locked after the closer. Keep responding warmly and briefly to whatever the doctor says next. Do not stay silent.
+- Two paths:
+  (A) The doctor reveals new info that brings them into the qualified set (e.g., "I've been working in London for 5 years", "I got my specialty in the UAE", "actually I also did my fellowship in Boston"): re-engage warmly with something like "Oh, that changes things — I'd love to continue then! [next intake question]" and pick the intake flow back up from wherever you left off.
+  (B) The doctor pushes back, asks why, or just keeps chatting without revealing re-qualifying info ("Are you sure?", "What about next year?", "Why not?", "I really need this", "Please", etc.): respond briefly (1 sentence) and warmly, restating the polite no in different wording each time. Examples: "I really am sorry, our current focus is just on doctors with Western-trained qualifications.", "I wish I could help more! Our team's bandwidth is locked to Western-trained doctors for now.", "Totally hear you. We just can't take this on right now, but please do check back in the future.". Do NOT re-ask qualification questions. Do NOT offer the Calendly link. Do NOT make promises about the future beyond a vague "check back later".
+- After 3-4 polite no's in path (B), it's fine to give a final short close like "Thanks again for reaching out — wishing you the best!" rather than continuing forever.
 
 WHAT TO DO WHEN A DOCTOR IS UNQUALIFIED (hard stop — non-negotiable):
 - Triggers: country of training is NOT in the qualified list, OR age is above 60, OR age is below 30 (when shared).
 - Stop the qualification flow IMMEDIATELY. Do NOT ask for any further fields (no phone, no email, no age if not already shared, no anything).
 - Do NOT offer the Calendly booking link. Do NOT mention a placement specialist.
-- Send this exact polite closer (one short message, you can lightly rephrase to fit context but keep the spirit): "Thank you so much for your interest. At the moment, we specialize in working with doctors who hold Western-trained qualifications. We truly appreciate your time and wish you all the best."
+- Send this exact polite closer (one short message, you can lightly rephrase to fit context but keep the spirit): "Thank you so much for your interest! Unfortunately, at the moment we specialize in working with doctors who hold Western-trained qualifications, so it's not something we'd be able to help with right now. We truly appreciate your time and wish you all the best."
 - After sending the closer, end gracefully. If the doctor continues to message, respond briefly and warmly but do not re-engage the qualification flow.
 - Never explicitly tell them they are "unqualified" or "rejected" — the closer above is the right phrasing.
 
