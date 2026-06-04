@@ -784,7 +784,20 @@ export const ChatPanel = ({
         .eq('conversation_id', conversation.id)
         .order('sequence_number', { ascending: true });
       if (cancelled) return;
-      setFreshMessages(((data || []) as any[]).map(m => ({ ...m, sender_type: m.sender_type as 'agent' | 'visitor' })));
+      // Map snake_case DB rows to the TS Message shape the rest of ChatPanel
+      // expects (timestamp as Date, senderId/senderType camelCase). Skipping
+      // this caused date-fns to throw "Invalid time value" because msg.timestamp
+      // was undefined.
+      const mapped: Message[] = ((data || []) as any[]).map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderType: m.sender_type as 'agent' | 'visitor',
+        content: m.content,
+        timestamp: new Date(m.created_at),
+        read: !!m.read,
+      }));
+      setFreshMessages(mapped);
     })();
     return () => { cancelled = true; };
   }, [conversation?.id]);
