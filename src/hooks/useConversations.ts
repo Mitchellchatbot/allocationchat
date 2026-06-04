@@ -229,11 +229,16 @@ export const useConversations = (options: UseConversationsOptions = {}) => {
     // Step 2: fetch all messages for these conversations in ONE batch query
     // (one indexed IN lookup instead of 300 correlated subqueries)
     const convIds = convData.map((c) => c.id);
+    // Supabase's default row cap is 1000. Without an explicit .limit(), ~300
+    // conversations × a handful of messages each is enough to truncate every
+    // conversation at roughly seq 3. Bump to a number large enough that 300+
+    // conversations with full intake transcripts (~20 messages each) fit.
     const { data: messagesData } = await supabase
       .from('messages')
       .select('*')
       .in('conversation_id', convIds)
-      .order('sequence_number', { ascending: true });
+      .order('sequence_number', { ascending: true })
+      .limit(20000);
 
     const messagesByConvId = new Map<string, DbMessage[]>();
     for (const m of (messagesData || []) as any[]) {
@@ -311,11 +316,13 @@ export const useConversations = (options: UseConversationsOptions = {}) => {
       return;
     }
 
+    // Same Supabase 1000-row cap problem as the initial load — explicit limit.
     const { data: newMsgs } = await supabase
       .from('messages')
       .select('*')
       .in('conversation_id', newConvs.map((c) => c.id))
-      .order('sequence_number', { ascending: true });
+      .order('sequence_number', { ascending: true })
+      .limit(20000);
 
     const msgsByConvId = new Map<string, DbMessage[]>();
     for (const m of (newMsgs || []) as any[]) {

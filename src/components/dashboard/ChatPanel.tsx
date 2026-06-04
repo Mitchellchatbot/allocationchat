@@ -769,16 +769,38 @@ export const ChatPanel = ({
     );
   }, [conversation?.id]);
 
-  // Deduplicate messages by id as a safety net against any race conditions
+  // The bulk message loader in useConversations can be truncated by Supabase's
+  // default row cap when many conversations are listed — re-fetch the full
+  // message list for the currently-selected conversation so the open chat is
+  // always complete, even if the list-view preview was truncated.
+  const [freshMessages, setFreshMessages] = useState<Message[] | null>(null);
+  useEffect(() => {
+    if (!conversation?.id) { setFreshMessages(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversation.id)
+        .order('sequence_number', { ascending: true });
+      if (cancelled) return;
+      setFreshMessages(((data || []) as any[]).map(m => ({ ...m, sender_type: m.sender_type as 'agent' | 'visitor' })));
+    })();
+    return () => { cancelled = true; };
+  }, [conversation?.id]);
+
+  // Deduplicate messages by id as a safety net against any race conditions.
+  // Prefer the freshly-fetched per-conversation list when available; fall back
+  // to the bulk-loaded list while the fresh fetch is in flight.
   const messages = useMemo(() => {
-    const raw = conversation?.messages ?? [];
+    const raw = freshMessages ?? conversation?.messages ?? [];
     const seen = new Set<string>();
     return raw.filter(m => {
       if (seen.has(m.id)) return false;
       seen.add(m.id);
       return true;
     });
-  }, [conversation?.messages]);
+  }, [freshMessages, conversation?.messages]);
 
   if (!conversation) {
     return <EmptyState />;
