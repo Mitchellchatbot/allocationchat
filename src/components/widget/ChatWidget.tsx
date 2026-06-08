@@ -455,9 +455,10 @@ export const ChatWidget = ({
         const ext = file.name.split('.').pop() || (isImage ? 'jpg' : 'bin');
         const fileName = `widget-uploads/${timestamp}-${randomStr}.${ext}`;
 
-        // Upload to Supabase storage
+        // Upload to the dedicated doctor-attachments bucket (separate from
+        // agent-avatars so visitor uploads don't pollute the avatar bucket).
         const { data, error } = await supabase.storage
-          .from('agent-avatars')
+          .from('doctor-attachments')
           .upload(fileName, file, { upsert: true, contentType: file.type });
 
         if (error) {
@@ -467,7 +468,7 @@ export const ChatWidget = ({
 
         // Get public URL
         const { data: urlData } = supabase.storage
-          .from('agent-avatars')
+          .from('doctor-attachments')
           .getPublicUrl(fileName);
 
         if (urlData?.publicUrl) {
