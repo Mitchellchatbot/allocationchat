@@ -7,6 +7,53 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Linkifies plain-text messages: URLs become clickable anchors.
 // Calendly URLs get a prominent "Book a meeting" pill so they stand out.
+// Attachment message tag format. The widget posts uploads as either:
+//   [Attachment: filename | mimeType | sizeBytes]\n<url>     (new format)
+//   [Image uploaded: filename]\n<url>                         (legacy format)
+// Parser tolerates both and returns null for normal text messages.
+export type ParsedAttachment = {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number | null;
+  url: string;
+  isImage: boolean;
+};
+export function parseAttachment(content: string): ParsedAttachment | null {
+  if (!content) return null;
+  // New format with pipe-separated metadata
+  const newMatch = content.match(/^\[Attachment:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(\d+)\]\s*\n(https?:\/\/\S+)/i);
+  if (newMatch) {
+    return {
+      filename: newMatch[1],
+      mimeType: newMatch[2],
+      sizeBytes: parseInt(newMatch[3], 10) || null,
+      url: newMatch[4],
+      isImage: newMatch[2].startsWith('image/'),
+    };
+  }
+  // Legacy "Image uploaded: filename\nurl"
+  const legacyMatch = content.match(/^\[Image uploaded:\s*(.+?)\]\s*\n(https?:\/\/\S+)/i);
+  if (legacyMatch) {
+    const fname = legacyMatch[1];
+    const ext = fname.split('.').pop()?.toLowerCase() || '';
+    const guessedMime = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext) ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'image/*';
+    return {
+      filename: fname,
+      mimeType: guessedMime,
+      sizeBytes: null,
+      url: legacyMatch[2],
+      isImage: true,
+    };
+  }
+  return null;
+}
+export function humanFileSize(bytes: number | null): string {
+  if (bytes == null || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 const URL_REGEX = /(https?:\/\/[^\s)]+)/g;
 function renderMessageContent(content: string) {
   const parts = content.split(URL_REGEX);
@@ -378,24 +425,43 @@ export const ChatWidget = ({
 
     try {
       for (const file of Array.from(files)) {
-        // Check file type
-        if (!file.type.startsWith('image/')) {
+        // Accept images (jpg/png/gif/webp/heic) and common document types
+        // doctors share — CVs are typically PDF, occasionally Word.
+        const ALLOWED_DOC_TYPES = new Set([
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'text/plain',
+          'text/csv',
+        ]);
+        const isImage = file.type.startsWith('image/');
+        const isDoc = ALLOWED_DOC_TYPES.has(file.type);
+        if (!isImage && !isDoc) {
+          console.warn('Skipping unsupported file type:', file.type);
+          continue;
+        }
+
+        // Size cap — 10 MB. Bigger CVs are rare; keeps abuse + storage in check.
+        if (file.size > 10 * 1024 * 1024) {
+          alert(`"${file.name}" is too large. Please upload files under 10 MB.`);
           continue;
         }
 
         // Create a unique filename
         const timestamp = Date.now();
         const randomStr = Math.random().toString(36).substring(2, 9);
-        const ext = file.name.split('.').pop() || 'jpg';
+        const ext = file.name.split('.').pop() || (isImage ? 'jpg' : 'bin');
         const fileName = `widget-uploads/${timestamp}-${randomStr}.${ext}`;
 
         // Upload to Supabase storage
         const { data, error } = await supabase.storage
           .from('agent-avatars')
-          .upload(fileName, file, { upsert: true });
+          .upload(fileName, file, { upsert: true, contentType: file.type });
 
         if (error) {
-          console.error('Failed to upload image:', error);
+          console.error('Failed to upload file:', error);
           continue;
         }
 
@@ -405,11 +471,16 @@ export const ChatWidget = ({
           .getPublicUrl(fileName);
 
         if (urlData?.publicUrl) {
-          // Send message with image
-          sendMessage(`[Image uploaded: ${file.name}]\n${urlData.publicUrl}`);
-          
-          // Save insurance card URL to visitor record
-          if (visitorId) {
+          // Tagged message format — dashboard + widget both look for this tag
+          // to render the attachment as a proper file card rather than raw text.
+          // Format: [Attachment: filename | mimeType | size]\n<url>
+          const tag = `[Attachment: ${file.name} | ${file.type} | ${file.size}]`;
+          sendMessage(`${tag}\n${urlData.publicUrl}`);
+
+          // Save image uploads to insurance_card_url (existing column) for
+          // back-compat with the visitor info extraction. Document uploads
+          // (CVs etc.) aren't insurance cards so we don't write there.
+          if (visitorId && isImage) {
             const sessionId = window.__scaledbot_session_id || localStorage.getItem('chat_session_id') || '';
             fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-visitor`, {
               method: 'POST',
@@ -423,7 +494,7 @@ export const ChatWidget = ({
         }
       }
     } catch (error) {
-      console.error('Error uploading images:', error);
+      console.error('Error uploading files:', error);
     }
 
     setUploadingImage(false);
@@ -794,16 +865,30 @@ export const ChatWidget = ({
                           <div className="max-w-[75%]">
                             <div className="px-4 py-3 shadow-sm"
                               style={{ background: 'var(--widget-primary)', color: 'white', borderRadius: `${messageRadiusLarge} ${messageRadiusLarge} ${messageRadiusSmall} ${messageRadiusLarge}` }}>
-                              {msg.content.includes('[Image uploaded:') && msg.content.includes('https://') ? (
-                                <div className="space-y-2">
-                                  <p className="text-sm text-opacity-80">📷 Image uploaded</p>
-                                  <img src={msg.content.split('\n').pop() || ''} alt="Uploaded"
-                                    className="max-w-full rounded-lg max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                    onClick={() => window.open(msg.content.split('\n').pop(), '_blank')} />
-                                </div>
-                              ) : (
-                                <p className="text-xs whitespace-pre-wrap leading-relaxed text-left">{msg.content}</p>
-                              )}
+                              {(() => {
+                                const att = parseAttachment(msg.content);
+                                if (!att) return <p className="text-xs whitespace-pre-wrap leading-relaxed text-left">{msg.content}</p>;
+                                if (att.isImage) {
+                                  return (
+                                    <div className="space-y-2">
+                                      <p className="text-sm text-opacity-80">📷 {att.filename}</p>
+                                      <img src={att.url} alt={att.filename}
+                                        className="max-w-full rounded-lg max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                        onClick={() => window.open(att.url, '_blank')} />
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <a href={att.url} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors no-underline text-white">
+                                    <span className="text-lg leading-none">📎</span>
+                                    <span className="flex-1 min-w-0">
+                                      <span className="block text-xs font-medium truncate">{att.filename}</span>
+                                      {att.sizeBytes ? <span className="block text-[10px] opacity-70">{humanFileSize(att.sizeBytes)}</span> : null}
+                                    </span>
+                                  </a>
+                                );
+                              })()}
                               <p className="text-xs mt-1.5 text-right text-white/70">{format(new Date(msg.created_at), 'h:mm a')}</p>
                             </div>
                           </div>
@@ -861,16 +946,30 @@ export const ChatWidget = ({
                           <div className="max-w-[75%]">
                             <div className="px-4 py-3 shadow-sm"
                               style={{ background: 'var(--widget-primary)', color: 'white', borderRadius: `${messageRadiusLarge} ${messageRadiusLarge} ${messageRadiusSmall} ${messageRadiusLarge}` }}>
-                              {msg.content.includes('[Image uploaded:') && msg.content.includes('https://') ? (
-                                <div className="space-y-2">
-                                  <p className="text-sm text-opacity-80">📷 Image uploaded</p>
-                                  <img src={msg.content.split('\n').pop() || ''} alt="Uploaded"
-                                    className="max-w-full rounded-lg max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                    onClick={() => window.open(msg.content.split('\n').pop(), '_blank')} />
-                                </div>
-                              ) : (
-                                <p className="text-xs whitespace-pre-wrap leading-relaxed text-left">{msg.content}</p>
-                              )}
+                              {(() => {
+                                const att = parseAttachment(msg.content);
+                                if (!att) return <p className="text-xs whitespace-pre-wrap leading-relaxed text-left">{msg.content}</p>;
+                                if (att.isImage) {
+                                  return (
+                                    <div className="space-y-2">
+                                      <p className="text-sm text-opacity-80">📷 {att.filename}</p>
+                                      <img src={att.url} alt={att.filename}
+                                        className="max-w-full rounded-lg max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                        onClick={() => window.open(att.url, '_blank')} />
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <a href={att.url} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors no-underline text-white">
+                                    <span className="text-lg leading-none">📎</span>
+                                    <span className="flex-1 min-w-0">
+                                      <span className="block text-xs font-medium truncate">{att.filename}</span>
+                                      {att.sizeBytes ? <span className="block text-[10px] opacity-70">{humanFileSize(att.sizeBytes)}</span> : null}
+                                    </span>
+                                  </a>
+                                );
+                              })()}
                               <p className="text-xs mt-1.5 text-right text-white/70">{format(new Date(msg.created_at), 'h:mm a')}</p>
                             </div>
                           </div>
@@ -1020,18 +1119,18 @@ export const ChatWidget = ({
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
                       multiple
                       onChange={handleImageUpload}
                       className="hidden"
                     />
-                    {/* Image upload button */}
+                    {/* File upload button — images, PDFs, Word docs, CVs */}
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingImage}
                       className="h-10 w-10 flex-shrink-0 flex items-center justify-center border border-border/50 bg-background/80 text-muted-foreground hover:text-foreground hover:bg-background transition-all duration-300 disabled:opacity-50"
                       style={{ borderRadius: buttonRadius }}
-                      title="Upload image"
+                      title="Upload image, PDF, or document"
                     >
                       {uploadingImage ? (
                         <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />

@@ -53,6 +53,45 @@ const formatMessageTime = (date: Date) => {
   return format(date, 'MMM d, h:mm a');
 };
 
+// Attachment tag format used by the chat widget when a doctor uploads a file.
+// Two formats supported (new + legacy). Parser returns null for normal text
+// messages so we fall through to the standard renderer.
+type ParsedAttachment = {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number | null;
+  url: string;
+  isImage: boolean;
+};
+function parseAttachment(content: string): ParsedAttachment | null {
+  if (!content) return null;
+  const newMatch = content.match(/^\[Attachment:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(\d+)\]\s*\n(https?:\/\/\S+)/i);
+  if (newMatch) {
+    return {
+      filename: newMatch[1],
+      mimeType: newMatch[2],
+      sizeBytes: parseInt(newMatch[3], 10) || null,
+      url: newMatch[4],
+      isImage: newMatch[2].startsWith('image/'),
+    };
+  }
+  const legacyMatch = content.match(/^\[Image uploaded:\s*(.+?)\]\s*\n(https?:\/\/\S+)/i);
+  if (legacyMatch) {
+    const fname = legacyMatch[1];
+    const ext = fname.split('.').pop()?.toLowerCase() || '';
+    const guessedMime = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext)
+      ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'image/*';
+    return { filename: fname, mimeType: guessedMime, sizeBytes: null, url: legacyMatch[2], isImage: true };
+  }
+  return null;
+}
+function humanFileSize(bytes: number | null): string {
+  if (bytes == null || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 const MessageBubble = ({
   message,
   isAgent,
@@ -121,9 +160,34 @@ const MessageBubble = ({
               className="text-sm bg-transparent border-none shadow-none resize-none p-0 focus-visible:ring-0 text-chat-user-foreground placeholder:text-chat-user-foreground/50 min-h-[60px]"
               autoFocus
             />
-          ) : (
-            <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
-          )}
+          ) : (() => {
+            const att = parseAttachment(message.content);
+            if (!att) return <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>;
+            if (att.isImage) {
+              return (
+                <div className="space-y-2">
+                  <p className="text-xs opacity-80">📷 {att.filename}{att.sizeBytes ? ` • ${humanFileSize(att.sizeBytes)}` : ''}</p>
+                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="block">
+                    <img src={att.url} alt={att.filename}
+                      className="max-w-full rounded-lg max-h-64 object-cover cursor-pointer hover:opacity-90 transition-opacity" />
+                  </a>
+                </div>
+              );
+            }
+            return (
+              <a href={att.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-black/10 hover:bg-black/20 transition-colors no-underline">
+                <span className="text-lg leading-none">📎</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-medium truncate">{att.filename}</span>
+                  <span className="block text-xs opacity-70">
+                    {att.mimeType}{att.sizeBytes ? ` • ${humanFileSize(att.sizeBytes)}` : ''}
+                  </span>
+                </span>
+                <span className="text-xs opacity-70">Open</span>
+              </a>
+            );
+          })()}
           <p className={cn("text-xs mt-1", isAgent ? "text-chat-user-foreground/70" : "text-muted-foreground")}>
             {formatMessageTime(new Date(message.timestamp))}
           </p>
@@ -316,12 +380,14 @@ const VisitorInfoSidebar = ({
   visitor,
   assignedAgent,
   propertyName,
-  conversationId
+  conversationId,
+  messages,
 }: {
   visitor: any;
   assignedAgent: any;
   propertyName?: string;
   conversationId?: string;
+  messages?: Message[];
 }) => {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(true);
@@ -505,6 +571,39 @@ const VisitorInfoSidebar = ({
             </Button>
           </div>
         )}
+
+        {(() => {
+          // Surface every attachment shared in this conversation as a quick
+          // list (image previews + file download links). Useful when the rep
+          // wants to grab the doctor's CV without scrolling the transcript.
+          const attachments = (messages || [])
+            .map(m => ({ msg: m, att: parseAttachment(m.content) }))
+            .filter(x => x.att) as Array<{ msg: typeof messages[number]; att: ParsedAttachment }>;
+          if (attachments.length === 0) return null;
+          return (
+            <div className="p-3 border-t border-border/30">
+              <p className="text-xs text-muted-foreground mb-2">Attachments ({attachments.length})</p>
+              <div className="space-y-2">
+                {attachments.map(({ msg, att }) => (
+                  <a key={msg.id} href={att.url} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 rounded-md bg-muted/40 hover:bg-muted transition-colors no-underline">
+                    {att.isImage ? (
+                      <img src={att.url} alt={att.filename} className="h-9 w-9 rounded object-cover flex-shrink-0" />
+                    ) : (
+                      <span className="h-9 w-9 rounded bg-background flex items-center justify-center text-base flex-shrink-0">📎</span>
+                    )}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-xs font-medium text-foreground truncate">{att.filename}</span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        {att.isImage ? 'Image' : att.mimeType}{att.sizeBytes ? ` • ${humanFileSize(att.sizeBytes)}` : ''}
+                      </span>
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {assignedAgent && (
           <div className="p-3 border-t border-border/30">
@@ -1013,7 +1112,7 @@ export const ChatPanel = ({
       </div>
 
       {/* Visitor Info Sidebar - Collapsible on large screens */}
-      <VisitorInfoSidebar visitor={visitor} assignedAgent={assignedAgent} propertyName={propertyName} conversationId={conversation?.id} />
+      <VisitorInfoSidebar visitor={visitor} assignedAgent={assignedAgent} propertyName={propertyName} conversationId={conversation?.id} messages={messages} />
 
       {/* Video Call Modal */}
       <VideoCallModal isOpen={isVideoCallOpen} onClose={() => setIsVideoCallOpen(false)} status={videoChat.status} isMuted={videoChat.isMuted} isVideoOff={videoChat.isVideoOff} error={videoChat.error} localVideoRef={videoChat.localVideoRef} remoteVideoRef={videoChat.remoteVideoRef} onEndCall={handleEndVideoCall} onToggleMute={videoChat.toggleMute} onToggleVideo={videoChat.toggleVideo} participantName={visitorName} isInitiator={true} />
