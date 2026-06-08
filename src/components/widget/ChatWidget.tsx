@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, Fragment } from 'react';
-import { MessageCircle, X, Send, Minimize2, User, Mail, ImagePlus, MessageSquare, MessagesSquare, Headphones, HelpCircle, Heart, Sparkles, Bot, Globe, Calendar, LucideIcon } from 'lucide-react';
+import { MessageCircle, X, Send, Minimize2, User, Mail, Paperclip, MessageSquare, MessagesSquare, Headphones, HelpCircle, Heart, Sparkles, Bot, Globe, Calendar, LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useWidgetChat } from '@/hooks/useWidgetChat';
@@ -1136,7 +1136,7 @@ export const ChatWidget = ({
                       {uploadingImage ? (
                         <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                       ) : (
-                        <ImagePlus className="h-4 w-4" />
+                        <Paperclip className="h-4 w-4" />
                       )}
                     </button>
                     <input
