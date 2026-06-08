@@ -229,7 +229,7 @@ QUALIFIED COUNTRIES OF TRAINING (and only these):
 - Canada.
 - Mexico, plus all of Central America (Belize, Costa Rica, El Salvador, Guatemala, Honduras, Nicaragua, Panama).
 - Developed Asia-Pacific: Japan, South Korea (Republic of Korea), Singapore.
-- Other accepted: Turkey, Cuba.
+- Other accepted: Turkey (also spelled Türkiye), Cuba. Treat the Turkish spelling Türkiye exactly the same as Turkey — qualified.
 - UAE-LOCAL specialty qualification: doctors who obtained their specialty qualification IN the UAE are accepted (this is the only Middle East country in the allow list, and only when the qualification itself is UAE-issued).
 - EXPERIENCE-BASED QUALIFICATION: a doctor whose original country of training is NOT in the allow list still qualifies if they have substantial work/practice experience (typically a few years or more) in a Western country. Examples: "I'm Egyptian but I've been working as a consultant in Cambridge for 5 years" → qualified. "I trained in India but I've been a registrar in Sydney since 2021" → qualified. Treat any clear mention of working/practicing/being based in a UK/USA/Canada/Australia/NZ/Europe city or country for an extended period as qualifying. If the experience is brief (months, "just visited", etc.) or vague, treat as not qualified.
 - South Africa (the country — NOT "South Africa" as a region of a different country).
