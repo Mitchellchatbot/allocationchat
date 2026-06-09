@@ -276,6 +276,44 @@ const EmptyState = () => {
 };
 
 // Editable visitor info item with edit/delete
+// Mirror of the backend's QUALIFIED_COUNTRIES list (extract-visitor-info,
+// zoho-export-leads, etc.) — kept inline because the dashboard runs in the
+// browser and can't import from the edge functions directory. If a country
+// is added/removed in the backend lists, mirror it here so the dashboard
+// "qualified" badge updates correctly when a rep edits country_of_training.
+const QUALIFIED_COUNTRIES_FRONTEND_REGEX = new RegExp(
+  '\\b(' + [
+    'europe','south america','united states','usa','us','u\\.s\\.','u\\.s\\.a\\.','america','canada','mexico',
+    'belize','costa rica','el salvador','guatemala','honduras','nicaragua','panama',
+    'japan','south korea','republic of korea','singapore','turkey','türkiye','turkiye','cuba',
+    'uae','united arab emirates','emirates','dubai','abu dhabi',
+    'united kingdom','uk','u\\.k\\.','great britain','britain','england','scotland','wales','northern ireland',
+    'australia','new zealand','south africa',
+    'argentina','bolivia','brazil','brasil','chile','colombia','ecuador',
+    'guyana','paraguay','peru','perú','suriname','uruguay','venezuela','french guiana',
+    'ireland','germany','france','spain','italy','portugal','netherlands','holland','belgium',
+    'switzerland','austria','sweden','norway','denmark','finland','iceland','poland','czech republic',
+    'czechia','slovakia','hungary','romania','bulgaria','greece','croatia','slovenia','serbia',
+    'albania','bosnia','montenegro','macedonia','lithuania','latvia','estonia','luxembourg','malta','cyprus',
+    'méxico','panamá',
+  ].map(c => c.replace(/\s+/g, '\\s+')).join('|') + ')\\b',
+  'i',
+);
+// Compute qualified the same way zoho-export-leads' isQualified() does:
+// country must match + (no age OR age ∈ [30,60]). Returns null when both
+// country and age are missing/ambiguous so callers can show "Pending".
+function computeQualified(country: string | null | undefined, age: string | null | undefined): boolean | null {
+  const c = (country || '').trim();
+  if (!c) return null; // can't decide without country
+  if (!QUALIFIED_COUNTRIES_FRONTEND_REGEX.test(c)) return false;
+  const ageStr = (age || '').trim();
+  if (ageStr) {
+    const n = parseInt(ageStr, 10);
+    if (!isNaN(n) && (n < 30 || n > 60)) return false;
+  }
+  return true;
+}
+
 const EditableInfoItem = ({
   icon: Icon,
   label,
@@ -304,25 +342,46 @@ const EditableInfoItem = ({
     }
   }, [editing]);
 
+  // Editing country_of_training or age changes whether the lead qualifies —
+  // recompute and persist the qualified flag in the same update so the
+  // dashboard badge and the Zoho export both see the fresh value. (Other
+  // fields don't affect qualification, so they take the simple write path.)
+  const buildUpdate = async (newValue: string | null): Promise<Record<string, unknown>> => {
+    const update: Record<string, unknown> = { [fieldKey]: newValue };
+    if (fieldKey === 'country_of_training' || fieldKey === 'age') {
+      const { data: current } = await supabase
+        .from('visitors')
+        .select('country_of_training, age')
+        .eq('id', visitorId)
+        .maybeSingle();
+      const merged = { ...(current || {}), [fieldKey]: newValue };
+      update.qualified = computeQualified((merged as any).country_of_training, (merged as any).age);
+    }
+    return update;
+  };
+
   const handleSave = async () => {
     if (editValue.trim() === value) { setEditing(false); return; }
     setSaving(true);
+    const newValue = editValue.trim() || null;
+    const updatePayload = await buildUpdate(newValue);
     const { error } = await supabase
       .from('visitors')
-      .update({ [fieldKey]: editValue.trim() || null })
+      .update(updatePayload)
       .eq('id', visitorId);
     setSaving(false);
     if (!error) {
-      onUpdated(fieldKey, editValue.trim() || null);
+      onUpdated(fieldKey, newValue);
       setEditing(false);
     }
   };
 
   const handleDelete = async () => {
     setSaving(true);
+    const updatePayload = await buildUpdate(null);
     const { error } = await supabase
       .from('visitors')
-      .update({ [fieldKey]: null })
+      .update(updatePayload)
       .eq('id', visitorId);
     setSaving(false);
     if (!error) {

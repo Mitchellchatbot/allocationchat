@@ -493,8 +493,13 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Skip unqualified leads
-      if (visitor.qualified === false || !isQualified(visitor as Record<string, string | null>)) {
+      // Skip unqualified leads. We deliberately do NOT trust the stored
+      // visitors.qualified flag here — it's set by the AI extractor when a
+      // lead first comes in, but a human editing country/age in the dashboard
+      // doesn't recompute it, so it can be stale (e.g. Nigeria → UK edit
+      // leaves qualified=false). isQualified() reads the current
+      // country_of_training + age and is always accurate.
+      if (!isQualified(visitor as Record<string, string | null>)) {
         console.log(`Skipping unqualified visitor ${visitorId}`);
         results.skipped++;
         results.skippedUnqualified++;
