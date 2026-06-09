@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { Send, MoreVertical, User, Globe, Monitor, MapPin, Archive, UserPlus, Video, Phone, Briefcase, Calendar, Mail, ChevronRight, ChevronLeft, MessageSquare, Heart, Pill, Building, Shield, AlertTriangle, Bot, BotOff, Slash, X, Clock, Pencil, Check, MousePointerClick, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -92,10 +92,11 @@ function humanFileSize(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Render message content with inline Calendly URLs replaced by the same
-// branded "Book a meeting with [Rep]" button the widget shows. Reps see
-// what the doctor saw, not a raw URL.
-const CALENDLY_URL_REGEX = /(https?:\/\/[^\s)]*calendly\.com\/[^\s)]+)/gi;
+// Mirror of the widget's renderMessageContent: split on any URL, render
+// Calendly URLs as the branded blue button (with rep name extracted from
+// the slug) and any other URL as an underlined link. Keeps the dashboard
+// chat view visually consistent with what doctors see in the widget.
+const ANY_URL_REGEX = /(https?:\/\/[^\s)]+)/g;
 function repFromCalendlyUrl(url: string): string | null {
   try {
     const u = new URL(url);
@@ -106,42 +107,45 @@ function repFromCalendlyUrl(url: string): string | null {
   } catch { return null; }
 }
 function renderMessageWithCalendly(content: string): React.ReactNode {
-  if (!CALENDLY_URL_REGEX.test(content)) {
-    CALENDLY_URL_REGEX.lastIndex = 0;
-    return <p className="text-sm whitespace-pre-wrap break-words">{content}</p>;
-  }
-  CALENDLY_URL_REGEX.lastIndex = 0;
-  const parts: React.ReactNode[] = [];
-  let lastIdx = 0;
-  let m: RegExpExecArray | null;
-  let key = 0;
-  // eslint-disable-next-line no-cond-assign
-  while ((m = CALENDLY_URL_REGEX.exec(content)) !== null) {
-    const before = content.slice(lastIdx, m.index);
-    if (before) parts.push(<span key={key++}>{before}</span>);
-    const url = m[0];
-    const rep = repFromCalendlyUrl(url);
-    parts.push(
+  const parts = content.split(ANY_URL_REGEX);
+  ANY_URL_REGEX.lastIndex = 0;
+  const nodes = parts.map((part, i) => {
+    if (!part) return null;
+    if (!part.startsWith('http')) {
+      return <React.Fragment key={i}>{part}</React.Fragment>;
+    }
+    const isCalendly = /calendly\.com/i.test(part);
+    if (isCalendly) {
+      const rep = repFromCalendlyUrl(part);
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 mt-1.5 mr-1 px-4 py-2 rounded-md font-semibold no-underline shadow-sm hover:shadow-md transition-all align-middle"
+          style={{ background: '#006bff', color: 'white' }}
+        >
+          <Calendar className="h-4 w-4" />
+          <span>
+            Book a meeting{rep ? ` with ${rep}` : ''}
+          </span>
+        </a>
+      );
+    }
+    return (
       <a
-        key={key++}
-        href={url}
+        key={i}
+        href={part}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 mt-1.5 mr-1 px-3 py-1.5 rounded-md font-semibold no-underline shadow-sm hover:shadow-md transition-all align-middle"
-        style={{ background: '#006bff', color: 'white' }}
+        className="underline text-primary hover:opacity-80"
       >
-        <Calendar className="h-4 w-4" />
-        <span className="text-xs">
-          Book a meeting{rep ? ` with ${rep}` : ''}
-        </span>
-      </a>,
+        {part}
+      </a>
     );
-    lastIdx = m.index + url.length;
-  }
-  CALENDLY_URL_REGEX.lastIndex = 0;
-  const tail = content.slice(lastIdx);
-  if (tail) parts.push(<span key={key++}>{tail}</span>);
-  return <p className="text-sm whitespace-pre-wrap break-words">{parts}</p>;
+  });
+  return <p className="text-sm whitespace-pre-wrap break-words">{nodes}</p>;
 }
 
 const MessageBubble = ({
