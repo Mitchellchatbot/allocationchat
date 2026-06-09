@@ -488,7 +488,11 @@ Deno.serve(async (req) => {
           .select("calendly_url")
           .eq("id", conv.property_id)
           .maybeSingle();
-        const calendlyUrl = (property as any)?.calendly_url as string | null;
+        // properties.calendly_url can hold multiple URLs (one per line) so
+        // reps can distribute leads across the team. Pick one at random.
+        const calendlyRaw = (property as any)?.calendly_url as string | null;
+        const calendlyOptions = (calendlyRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
+        const calendlyUrl = calendlyOptions.length === 0 ? null : calendlyOptions[Math.floor(Math.random() * calendlyOptions.length)];
         if (calendlyUrl) {
           const fallbackContent =
             `No problem at all if you'd rather not share your number. You can still book a call at a time that works for you: ${calendlyUrl}`;

@@ -34,7 +34,16 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const messages = Array.isArray(body.messages) ? body.messages : [];
-    const { propertyContext, personalityPrompt, agentName, calendlyUrl, conversationId } = body;
+    const { propertyContext, personalityPrompt, agentName, conversationId } = body;
+    // Calendly: the dashboard accepts one URL per line so reps can distribute
+    // leads across multiple team members. Pick one at random per request so
+    // bookings spread roughly evenly. The Calendly link is offered ~once per
+    // conversation so this also varies per-doctor naturally.
+    const calendlyUrlRaw: string | null = body.calendlyUrl ?? null;
+    const calendlyUrlsList = (calendlyUrlRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
+    const calendlyUrl: string | null = calendlyUrlsList.length === 0
+      ? null
+      : calendlyUrlsList[Math.floor(Math.random() * calendlyUrlsList.length)];
     const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 
     // Hard-stop guard: if widget-save-message already posted the unqualified

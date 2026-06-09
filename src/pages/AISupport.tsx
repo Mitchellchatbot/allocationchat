@@ -1805,11 +1805,13 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
                         />
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        After collecting contact info, the AI will offer visitors a link to book a call via Calendly.
+                        After collecting contact info, the AI will offer visitors a link to book a call via Calendly. Paste one link per line to distribute leads across multiple team members — the system picks one at random for each conversation.
                       </p>
-                      <Input
-                        placeholder="https://calendly.com/your-team/consultation"
+                      <Textarea
+                        placeholder={'https://calendly.com/asser-allocationassist/30min\nhttps://calendly.com/abraham-98/15min'}
                         value={settings.calendly_url || ''}
+                        rows={3}
+                        className="font-mono text-sm"
                         onChange={(e) => setSettings({
                           ...settings,
                           calendly_url: e.target.value || null,
@@ -1817,7 +1819,11 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
                       />
                       {settings.calendly_url && (
                         <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                          ✅ After the visitor shares their name and phone number, the AI will offer this booking link once during the conversation.
+                          {(() => {
+                            const urls = (settings.calendly_url || '').split(/\s*[\n,]\s*/).map(s => s.trim()).filter(Boolean);
+                            if (urls.length <= 1) return '✅ After the visitor shares their name and phone number, the AI will offer this booking link once during the conversation.';
+                            return `✅ ${urls.length} booking links configured. The system picks one at random for each conversation to balance leads across your team.`;
+                          })()}
                         </p>
                       )}
                     </div>

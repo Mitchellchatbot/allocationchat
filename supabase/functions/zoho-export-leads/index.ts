@@ -285,9 +285,25 @@ async function createZohoLead(
   visitor: Record<string, string | null>,
   defaultOwnerId?: string | null,
 ): Promise<{ id: string; status: number; duplicate?: boolean; error?: string } | { id: null; status: number; error?: string }> {
-  const nameParts = (visitor.name || "").trim().split(/\s+/);
-  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : nameParts[0] || "Unknown";
-  const firstName = nameParts.length > 1 ? nameParts[0] : "";
+  // Strip common title prefixes ("Dr", "Dr.", "Mr.", "Ms.", "Mrs.", "Prof.")
+  // so the actual given name lands in First_Name, then split the rest into
+  // first + last. Without this, "Dr Mohammad Adloo" was getting First="Dr"
+  // and Last="Mohammad Adloo" — Zoho would then display the lead by its first
+  // name ("Dr") which is what Mitch was reporting.
+  const TITLE_PREFIX = /^\s*(dr|dr\.|mr|mr\.|mrs|mrs\.|ms|ms\.|miss|prof|prof\.|doctor)\s+/i;
+  let cleanedName = (visitor.name || "").trim();
+  while (TITLE_PREFIX.test(cleanedName)) cleanedName = cleanedName.replace(TITLE_PREFIX, '').trim();
+  const nameParts = cleanedName.split(/\s+/).filter(Boolean);
+  // Zoho requires Last_Name. If the doctor only gave one name word, use it
+  // as Last_Name (Zoho's convention for single-name records); otherwise the
+  // last word is Last_Name and everything before it joins as First_Name (so
+  // multi-word given names like "Mohammad Ali" survive intact).
+  const lastName = nameParts.length === 0
+    ? "Unknown"
+    : nameParts.length === 1
+      ? nameParts[0]
+      : nameParts[nameParts.length - 1];
+  const firstName = nameParts.length > 1 ? nameParts.slice(0, -1).join(" ") : "";
 
   const bookingFlagRaw = (visitor as any).booking_call_required;
   const needsBooking = bookingFlagRaw === true || bookingFlagRaw === 'true';

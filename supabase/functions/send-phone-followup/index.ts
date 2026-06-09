@@ -143,7 +143,11 @@ Deno.serve(async (req) => {
         .eq("id", conv.property_id)
         .maybeSingle();
 
-      const calendlyUrl = (property as any)?.calendly_url as string | null;
+      // properties.calendly_url can hold multiple URLs (one per line) — pick
+      // one at random per silence-fallback so team members share the load.
+      const calendlyRaw = (property as any)?.calendly_url as string | null;
+      const calendlyOptions = (calendlyRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
+      const calendlyUrl = calendlyOptions.length === 0 ? null : calendlyOptions[Math.floor(Math.random() * calendlyOptions.length)];
       if (!calendlyUrl) {
         // No Calendly configured — mark as sent so we don't keep retrying, but log
         console.warn(`send-phone-followup: skipping ${conv.id} — no Calendly URL on property ${conv.property_id}`);
