@@ -488,11 +488,35 @@ Deno.serve(async (req) => {
           .select("calendly_url")
           .eq("id", conv.property_id)
           .maybeSingle();
-        // properties.calendly_url can hold multiple URLs (one per line) so
-        // reps can distribute leads across the team. Pick one at random.
+        // properties.calendly_url can hold multiple URLs (one per line). Use
+        // strict round-robin by conversation creation order, cached on the
+        // conversation row so the link stays consistent within a single chat.
         const calendlyRaw = (property as any)?.calendly_url as string | null;
         const calendlyOptions = (calendlyRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
-        const calendlyUrl = calendlyOptions.length === 0 ? null : calendlyOptions[Math.floor(Math.random() * calendlyOptions.length)];
+        let calendlyUrl: string | null = null;
+        if (calendlyOptions.length === 1) {
+          calendlyUrl = calendlyOptions[0];
+        } else if (calendlyOptions.length > 1) {
+          const { data: convForCal } = await supabase
+            .from('conversations')
+            .select('calendly_url, property_id, created_at')
+            .eq('id', conversationId)
+            .maybeSingle();
+          if (convForCal?.calendly_url && calendlyOptions.includes(convForCal.calendly_url)) {
+            calendlyUrl = convForCal.calendly_url;
+          } else if (convForCal?.property_id && convForCal?.created_at) {
+            const { count } = await supabase
+              .from('conversations')
+              .select('*', { count: 'exact', head: true })
+              .eq('property_id', convForCal.property_id)
+              .lte('created_at', convForCal.created_at);
+            const idx = Math.max(0, (count ?? 1) - 1) % calendlyOptions.length;
+            calendlyUrl = calendlyOptions[idx];
+            await supabase.from('conversations').update({ calendly_url: calendlyUrl }).eq('id', conversationId);
+          } else {
+            calendlyUrl = calendlyOptions[0];
+          }
+        }
         if (calendlyUrl) {
           const fallbackContent =
             `No problem at all if you'd rather not share your number. You can still book a call at a time that works for you: ${calendlyUrl}`;

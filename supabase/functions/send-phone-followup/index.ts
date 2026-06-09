@@ -143,11 +143,35 @@ Deno.serve(async (req) => {
         .eq("id", conv.property_id)
         .maybeSingle();
 
-      // properties.calendly_url can hold multiple URLs (one per line) — pick
-      // one at random per silence-fallback so team members share the load.
+      // properties.calendly_url can hold multiple URLs (one per line). Strict
+      // round-robin by conversation creation order, cached on the conversation
+      // row so all three Calendly paths use the same link inside one chat.
       const calendlyRaw = (property as any)?.calendly_url as string | null;
       const calendlyOptions = (calendlyRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
-      const calendlyUrl = calendlyOptions.length === 0 ? null : calendlyOptions[Math.floor(Math.random() * calendlyOptions.length)];
+      let calendlyUrl: string | null = null;
+      if (calendlyOptions.length === 1) {
+        calendlyUrl = calendlyOptions[0];
+      } else if (calendlyOptions.length > 1) {
+        const { data: convForCal } = await supabase
+          .from('conversations')
+          .select('calendly_url, property_id, created_at')
+          .eq('id', conv.id)
+          .maybeSingle();
+        if (convForCal?.calendly_url && calendlyOptions.includes(convForCal.calendly_url)) {
+          calendlyUrl = convForCal.calendly_url;
+        } else if (convForCal?.property_id && convForCal?.created_at) {
+          const { count } = await supabase
+            .from('conversations')
+            .select('*', { count: 'exact', head: true })
+            .eq('property_id', convForCal.property_id)
+            .lte('created_at', convForCal.created_at);
+          const idx = Math.max(0, (count ?? 1) - 1) % calendlyOptions.length;
+          calendlyUrl = calendlyOptions[idx];
+          await supabase.from('conversations').update({ calendly_url: calendlyUrl }).eq('id', conv.id);
+        } else {
+          calendlyUrl = calendlyOptions[0];
+        }
+      }
       if (!calendlyUrl) {
         // No Calendly configured — mark as sent so we don't keep retrying, but log
         console.warn(`send-phone-followup: skipping ${conv.id} — no Calendly URL on property ${conv.property_id}`);

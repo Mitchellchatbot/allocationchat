@@ -35,15 +35,50 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const { propertyContext, personalityPrompt, agentName, conversationId } = body;
-    // Calendly: the dashboard accepts one URL per line so reps can distribute
-    // leads across multiple team members. Pick one at random per request so
-    // bookings spread roughly evenly. The Calendly link is offered ~once per
-    // conversation so this also varies per-doctor naturally.
+    // Calendly: dashboard accepts one URL per line so reps can spread leads
+    // across the team. Strict round-robin by conversation creation order
+    // (every other chat goes to the next URL), cached on the conversation
+    // row so all three Calendly paths show the same link inside one chat.
     const calendlyUrlRaw: string | null = body.calendlyUrl ?? null;
     const calendlyUrlsList = (calendlyUrlRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
-    const calendlyUrl: string | null = calendlyUrlsList.length === 0
-      ? null
-      : calendlyUrlsList[Math.floor(Math.random() * calendlyUrlsList.length)];
+    let calendlyUrl: string | null = null;
+    if (calendlyUrlsList.length === 1) {
+      calendlyUrl = calendlyUrlsList[0];
+    } else if (calendlyUrlsList.length > 1) {
+      if (conversationId) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const sb = createClient(supabaseUrl, serviceKey);
+        const { data: conv } = await sb
+          .from('conversations')
+          .select('calendly_url, property_id, created_at')
+          .eq('id', conversationId)
+          .maybeSingle();
+        // If a URL was already picked for this conversation AND it's still in
+        // the configured list, reuse it for consistency within the chat.
+        if (conv?.calendly_url && calendlyUrlsList.includes(conv.calendly_url)) {
+          calendlyUrl = conv.calendly_url;
+        } else if (conv?.property_id && conv?.created_at) {
+          // Strict round-robin: count conversations at this property created
+          // on or before this one; idx = (count - 1) % urls.length.
+          const { count } = await sb
+            .from('conversations')
+            .select('*', { count: 'exact', head: true })
+            .eq('property_id', conv.property_id)
+            .lte('created_at', conv.created_at);
+          const idx = Math.max(0, (count ?? 1) - 1) % calendlyUrlsList.length;
+          calendlyUrl = calendlyUrlsList[idx];
+          // Cache on the conversation row so the next path that needs the URL
+          // (decline fallback / silence cron) doesn't recompute.
+          await sb.from('conversations').update({ calendly_url: calendlyUrl }).eq('id', conversationId);
+        } else {
+          calendlyUrl = calendlyUrlsList[0];
+        }
+      } else {
+        // No conversationId — fall back to random so we still spread load.
+        calendlyUrl = calendlyUrlsList[Math.floor(Math.random() * calendlyUrlsList.length)];
+      }
+    }
     const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 
     // Hard-stop guard: if widget-save-message already posted the unqualified
