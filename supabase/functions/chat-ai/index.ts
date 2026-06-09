@@ -1,5 +1,69 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
+// Pick the next Calendly URL for a conversation in true round-robin fashion
+// across team members, but advance the rotation only when a URL has actually
+// been shown to a doctor (i.e., appeared in an agent message). This means
+// chats that never reach the Calendly step don't "use up" a rep's turn.
+//
+// Algorithm:
+//   1. If conversation already has calendly_url cached AND it's in the
+//      current list, reuse (consistency within chat).
+//   2. Otherwise, find the most recent agent message at this property that
+//      contains a calendly URL. Extract that URL, find its index in the list,
+//      pick index (lastIdx + 1) % len. If no message has shown a URL yet,
+//      start with index 0.
+//   3. Cache the pick on the conversation row.
+//
+// Normalisation: query strings and trailing slashes are stripped when matching
+// the historical URL against the configured list so superficial differences
+// don't cause us to think "we've never served this rep".
+// deno-lint-ignore no-explicit-any
+async function pickCalendlyForConversation(sb: any, conversationId: string, urls: string[]): Promise<string | null> {
+  if (urls.length === 0) return null;
+  if (urls.length === 1) return urls[0];
+
+  const { data: conv } = await sb
+    .from('conversations')
+    .select('calendly_url, property_id')
+    .eq('id', conversationId)
+    .maybeSingle();
+
+  if (conv?.calendly_url && urls.includes(conv.calendly_url)) {
+    return conv.calendly_url;
+  }
+  if (!conv?.property_id) return urls[0];
+
+  const normalize = (u: string) => u.trim().replace(/[?#].*$/, '').replace(/\/$/, '');
+  const normalizedList = urls.map(normalize);
+
+  // Find the most recent agent message at this property that contains any
+  // calendly URL. PostgREST nested filter on conversations.property_id keeps
+  // this scoped per property.
+  const { data: lastShown } = await sb
+    .from('messages')
+    .select('content, conversations!inner(property_id)')
+    .eq('conversations.property_id', conv.property_id)
+    .eq('sender_type', 'agent')
+    .ilike('content', '%calendly.com/%')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let nextIdx = 0;
+  if (lastShown?.content) {
+    const match = String(lastShown.content).match(/https?:\/\/[^\s)]*calendly\.com\/\S+/i);
+    if (match) {
+      const lastUrlNorm = normalize(match[0]);
+      const lastIdx = normalizedList.indexOf(lastUrlNorm);
+      if (lastIdx !== -1) nextIdx = (lastIdx + 1) % urls.length;
+    }
+  }
+
+  const picked = urls[nextIdx];
+  await sb.from('conversations').update({ calendly_url: picked }).eq('id', conversationId);
+  return picked;
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -35,10 +99,12 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const { propertyContext, personalityPrompt, agentName, conversationId } = body;
-    // Calendly: dashboard accepts one URL per line so reps can spread leads
-    // across the team. Strict round-robin by conversation creation order
-    // (every other chat goes to the next URL), cached on the conversation
-    // row so all three Calendly paths show the same link inside one chat.
+    // Calendly: dashboard accepts one URL per team member. Rotation is based
+    // on which URL was last *actually shown* to a doctor at this property
+    // (i.e., appeared in an agent message), not on chat count — so chats
+    // that never reach the Calendly-asking step don't advance the rotation
+    // and starve the other rep. Picked URL is cached on the conversation
+    // row so all three Calendly paths show the same link within one chat.
     const calendlyUrlRaw: string | null = body.calendlyUrl ?? null;
     const calendlyUrlsList = (calendlyUrlRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
     let calendlyUrl: string | null = null;
@@ -49,33 +115,8 @@ Deno.serve(async (req) => {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const sb = createClient(supabaseUrl, serviceKey);
-        const { data: conv } = await sb
-          .from('conversations')
-          .select('calendly_url, property_id, created_at')
-          .eq('id', conversationId)
-          .maybeSingle();
-        // If a URL was already picked for this conversation AND it's still in
-        // the configured list, reuse it for consistency within the chat.
-        if (conv?.calendly_url && calendlyUrlsList.includes(conv.calendly_url)) {
-          calendlyUrl = conv.calendly_url;
-        } else if (conv?.property_id && conv?.created_at) {
-          // Strict round-robin: count conversations at this property created
-          // on or before this one; idx = (count - 1) % urls.length.
-          const { count } = await sb
-            .from('conversations')
-            .select('*', { count: 'exact', head: true })
-            .eq('property_id', conv.property_id)
-            .lte('created_at', conv.created_at);
-          const idx = Math.max(0, (count ?? 1) - 1) % calendlyUrlsList.length;
-          calendlyUrl = calendlyUrlsList[idx];
-          // Cache on the conversation row so the next path that needs the URL
-          // (decline fallback / silence cron) doesn't recompute.
-          await sb.from('conversations').update({ calendly_url: calendlyUrl }).eq('id', conversationId);
-        } else {
-          calendlyUrl = calendlyUrlsList[0];
-        }
+        calendlyUrl = await pickCalendlyForConversation(sb, conversationId, calendlyUrlsList);
       } else {
-        // No conversationId — fall back to random so we still spread load.
         calendlyUrl = calendlyUrlsList[Math.floor(Math.random() * calendlyUrlsList.length)];
       }
     }

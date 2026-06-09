@@ -66,17 +66,32 @@ function renderMessageContent(content: string) {
     URL_REGEX.lastIndex = 0;
     const isCalendly = /calendly\.com/i.test(part);
     if (isCalendly) {
+      // Extract the rep's first name from the URL slug (e.g.
+      // calendly.com/asser-allocationassist/30min → "Asser") so the booking
+      // button tells the doctor exactly who they're getting connected to.
+      let repName: string | null = null;
+      try {
+        const u = new URL(part);
+        if (u.hostname.endsWith('calendly.com')) {
+          const slug = u.pathname.split('/').filter(Boolean)[0] || '';
+          const first = slug.split('-')[0] || '';
+          if (first) repName = first.charAt(0).toUpperCase() + first.slice(1);
+        }
+      } catch { /* invalid URL — render without rep name */ }
       return (
         <a
           key={i}
           href={part}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 mt-1.5 mr-1 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors text-primary font-medium no-underline"
-          style={{ background: 'var(--widget-primary, hsl(var(--primary)))', color: 'white' }}
+          className="inline-flex items-center gap-2 mt-1.5 mr-1 px-4 py-2 rounded-md font-semibold no-underline shadow-sm hover:shadow-md transition-all"
+          style={{ background: '#006bff', color: 'white' }}
         >
-          <Calendar className="h-3.5 w-3.5" />
-          Click here to book a meeting
+          <Calendar className="h-4 w-4" />
+          <span>
+            Book a meeting
+            {repName ? ` with ${repName}` : ''}
+          </span>
         </a>
       );
     }

@@ -34,6 +34,44 @@ const FOLLOWUP_QUALIFIED_COUNTRIES_REGEX = new RegExp(
   'i',
 );
 
+// Calendly rotation helper — mirrored from chat-ai and widget-save-message.
+// Picks the next URL after the last one actually shown to a doctor at this
+// property, caches the choice on the conversation row.
+// deno-lint-ignore no-explicit-any
+async function pickCalendlyForConversation(sb: any, conversationId: string, urls: string[]): Promise<string | null> {
+  if (urls.length === 0) return null;
+  if (urls.length === 1) return urls[0];
+  const { data: conv } = await sb
+    .from('conversations')
+    .select('calendly_url, property_id')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (conv?.calendly_url && urls.includes(conv.calendly_url)) return conv.calendly_url;
+  if (!conv?.property_id) return urls[0];
+  const normalize = (u: string) => u.trim().replace(/[?#].*$/, '').replace(/\/$/, '');
+  const normalizedList = urls.map(normalize);
+  const { data: lastShown } = await sb
+    .from('messages')
+    .select('content, conversations!inner(property_id)')
+    .eq('conversations.property_id', conv.property_id)
+    .eq('sender_type', 'agent')
+    .ilike('content', '%calendly.com/%')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let nextIdx = 0;
+  if (lastShown?.content) {
+    const match = String(lastShown.content).match(/https?:\/\/[^\s)]*calendly\.com\/\S+/i);
+    if (match) {
+      const lastIdx = normalizedList.indexOf(normalize(match[0]));
+      if (lastIdx !== -1) nextIdx = (lastIdx + 1) % urls.length;
+    }
+  }
+  const picked = urls[nextIdx];
+  await sb.from('conversations').update({ calendly_url: picked }).eq('id', conversationId);
+  return picked;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -143,35 +181,12 @@ Deno.serve(async (req) => {
         .eq("id", conv.property_id)
         .maybeSingle();
 
-      // properties.calendly_url can hold multiple URLs (one per line). Strict
-      // round-robin by conversation creation order, cached on the conversation
-      // row so all three Calendly paths use the same link inside one chat.
+      // properties.calendly_url can hold multiple URLs (one per line). Rotation
+      // is "next URL after the last one actually shown" — see
+      // pickCalendlyForConversation below for details.
       const calendlyRaw = (property as any)?.calendly_url as string | null;
       const calendlyOptions = (calendlyRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
-      let calendlyUrl: string | null = null;
-      if (calendlyOptions.length === 1) {
-        calendlyUrl = calendlyOptions[0];
-      } else if (calendlyOptions.length > 1) {
-        const { data: convForCal } = await supabase
-          .from('conversations')
-          .select('calendly_url, property_id, created_at')
-          .eq('id', conv.id)
-          .maybeSingle();
-        if (convForCal?.calendly_url && calendlyOptions.includes(convForCal.calendly_url)) {
-          calendlyUrl = convForCal.calendly_url;
-        } else if (convForCal?.property_id && convForCal?.created_at) {
-          const { count } = await supabase
-            .from('conversations')
-            .select('*', { count: 'exact', head: true })
-            .eq('property_id', convForCal.property_id)
-            .lte('created_at', convForCal.created_at);
-          const idx = Math.max(0, (count ?? 1) - 1) % calendlyOptions.length;
-          calendlyUrl = calendlyOptions[idx];
-          await supabase.from('conversations').update({ calendly_url: calendlyUrl }).eq('id', conv.id);
-        } else {
-          calendlyUrl = calendlyOptions[0];
-        }
-      }
+      const calendlyUrl = await pickCalendlyForConversation(supabase, conv.id, calendlyOptions);
       if (!calendlyUrl) {
         // No Calendly configured — mark as sent so we don't keep retrying, but log
         console.warn(`send-phone-followup: skipping ${conv.id} — no Calendly URL on property ${conv.property_id}`);

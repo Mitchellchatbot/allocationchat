@@ -34,6 +34,46 @@ const CALENDLY_QUALIFIED_COUNTRIES_REGEX = new RegExp(
   'i',
 );
 
+// Calendly rotation helper — same algorithm used in chat-ai and
+// send-phone-followup. Pick the next URL after the last one actually shown
+// to a doctor at this property; cache on the conversation row for consistency
+// within a single chat. Kept inline (not in _shared) because each Supabase
+// edge function bundles independently.
+// deno-lint-ignore no-explicit-any
+async function pickCalendlyForConversation(sb: any, conversationId: string, urls: string[]): Promise<string | null> {
+  if (urls.length === 0) return null;
+  if (urls.length === 1) return urls[0];
+  const { data: conv } = await sb
+    .from('conversations')
+    .select('calendly_url, property_id')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (conv?.calendly_url && urls.includes(conv.calendly_url)) return conv.calendly_url;
+  if (!conv?.property_id) return urls[0];
+  const normalize = (u: string) => u.trim().replace(/[?#].*$/, '').replace(/\/$/, '');
+  const normalizedList = urls.map(normalize);
+  const { data: lastShown } = await sb
+    .from('messages')
+    .select('content, conversations!inner(property_id)')
+    .eq('conversations.property_id', conv.property_id)
+    .eq('sender_type', 'agent')
+    .ilike('content', '%calendly.com/%')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let nextIdx = 0;
+  if (lastShown?.content) {
+    const match = String(lastShown.content).match(/https?:\/\/[^\s)]*calendly\.com\/\S+/i);
+    if (match) {
+      const lastIdx = normalizedList.indexOf(normalize(match[0]));
+      if (lastIdx !== -1) nextIdx = (lastIdx + 1) % urls.length;
+    }
+  }
+  const picked = urls[nextIdx];
+  await sb.from('conversations').update({ calendly_url: picked }).eq('id', conversationId);
+  return picked;
+}
+
 // Major Western cities — used as a "re-qualifying signal" when a doctor
 // mentions they work / practice / live in one of these. A doctor saying
 // "I've been working in Cambridge for 5 years" should be treated as
@@ -488,35 +528,12 @@ Deno.serve(async (req) => {
           .select("calendly_url")
           .eq("id", conv.property_id)
           .maybeSingle();
-        // properties.calendly_url can hold multiple URLs (one per line). Use
-        // strict round-robin by conversation creation order, cached on the
-        // conversation row so the link stays consistent within a single chat.
+        // properties.calendly_url can hold multiple URLs (one per line).
+        // Rotation is "next URL after the last one actually shown to a doctor
+        // at this property" — see pickCalendlyForConversation for details.
         const calendlyRaw = (property as any)?.calendly_url as string | null;
         const calendlyOptions = (calendlyRaw || '').split(/\s*[\n,]\s*/).map((s: string) => s.trim()).filter(Boolean);
-        let calendlyUrl: string | null = null;
-        if (calendlyOptions.length === 1) {
-          calendlyUrl = calendlyOptions[0];
-        } else if (calendlyOptions.length > 1) {
-          const { data: convForCal } = await supabase
-            .from('conversations')
-            .select('calendly_url, property_id, created_at')
-            .eq('id', conversationId)
-            .maybeSingle();
-          if (convForCal?.calendly_url && calendlyOptions.includes(convForCal.calendly_url)) {
-            calendlyUrl = convForCal.calendly_url;
-          } else if (convForCal?.property_id && convForCal?.created_at) {
-            const { count } = await supabase
-              .from('conversations')
-              .select('*', { count: 'exact', head: true })
-              .eq('property_id', convForCal.property_id)
-              .lte('created_at', convForCal.created_at);
-            const idx = Math.max(0, (count ?? 1) - 1) % calendlyOptions.length;
-            calendlyUrl = calendlyOptions[idx];
-            await supabase.from('conversations').update({ calendly_url: calendlyUrl }).eq('id', conversationId);
-          } else {
-            calendlyUrl = calendlyOptions[0];
-          }
-        }
+        const calendlyUrl = await pickCalendlyForConversation(supabase, conversationId, calendlyOptions);
         if (calendlyUrl) {
           const fallbackContent =
             `No problem at all if you'd rather not share your number. You can still book a call at a time that works for you: ${calendlyUrl}`;

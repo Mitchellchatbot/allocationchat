@@ -21,7 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { PropertySelector } from '@/components/PropertySelector';
-import { Bot, Loader2, Trash2, RefreshCw, Upload, Pencil, Clock, MessageSquare, Save, FileText, Users, Link, Globe, ChevronDown, Check, Map, MapPin, Sparkles } from 'lucide-react';
+import { Bot, Loader2, Trash2, RefreshCw, Upload, Pencil, Clock, MessageSquare, Save, FileText, Users, Link, Globe, ChevronDown, Check, Map, MapPin, Sparkles, Plus, X } from 'lucide-react';
 import { AvatarCropDialog } from '@/components/ui/avatar-crop-dialog';
 import { cn } from '@/lib/utils';
 import emilyAvatar from '@/assets/personas/emily.jpg';
@@ -1805,24 +1805,80 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
                         />
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        After collecting contact info, the AI will offer visitors a link to book a call via Calendly. Paste one link per line to distribute leads across multiple team members — the system picks one at random for each conversation.
+                        After collecting contact info, the AI will offer visitors a link to book a call via Calendly. Add a link per team member to rotate leads — the system serves the next rep after the one who got the previous lead.
                       </p>
-                      <Textarea
-                        placeholder={'https://calendly.com/asser-allocationassist/30min\nhttps://calendly.com/abraham-98/15min'}
-                        value={settings.calendly_url || ''}
-                        rows={3}
-                        className="font-mono text-sm"
-                        onChange={(e) => setSettings({
-                          ...settings,
-                          calendly_url: e.target.value || null,
-                        })}
-                      />
+                      {(() => {
+                        const urls = (settings.calendly_url || '').split(/\s*[\n,]\s*/).map(s => s.trim()).filter(Boolean);
+                        const list = urls.length > 0 ? urls : [''];
+                        const update = (newList: string[]) => {
+                          const cleaned = newList.map(s => s.trim()).filter(Boolean);
+                          setSettings({ ...settings, calendly_url: cleaned.length === 0 ? null : cleaned.join('\n') });
+                        };
+                        const updateAt = (i: number, value: string) => {
+                          const next = [...list];
+                          next[i] = value;
+                          update(next);
+                        };
+                        const remove = (i: number) => update(list.filter((_, idx) => idx !== i));
+                        const repNameFromUrl = (url: string): string | null => {
+                          try {
+                            const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+                            if (!u.hostname.endsWith('calendly.com')) return null;
+                            const slug = u.pathname.split('/').filter(Boolean)[0] || '';
+                            const first = slug.split('-')[0] || '';
+                            return first ? first.charAt(0).toUpperCase() + first.slice(1) : null;
+                          } catch { return null; }
+                        };
+                        return (
+                          <div className="space-y-2">
+                            {list.map((url, i) => {
+                              const repName = repNameFromUrl(url);
+                              return (
+                                <div key={i} className="flex items-start gap-2">
+                                  <div className="flex-1">
+                                    <Input
+                                      placeholder="https://calendly.com/your-team/consultation"
+                                      value={url}
+                                      onChange={(e) => updateAt(i, e.target.value)}
+                                    />
+                                    {repName && (
+                                      <p className="text-xs text-muted-foreground mt-1 pl-1">Rep: {repName}</p>
+                                    )}
+                                  </div>
+                                  {list.length > 1 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      type="button"
+                                      onClick={() => remove(i)}
+                                      className="text-muted-foreground hover:text-destructive shrink-0"
+                                      title="Remove this link"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              type="button"
+                              onClick={() => update([...list, ''])}
+                              className="gap-1.5"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Add another link
+                            </Button>
+                          </div>
+                        );
+                      })()}
                       {settings.calendly_url && (
                         <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
                           {(() => {
                             const urls = (settings.calendly_url || '').split(/\s*[\n,]\s*/).map(s => s.trim()).filter(Boolean);
                             if (urls.length <= 1) return '✅ After the visitor shares their name and phone number, the AI will offer this booking link once during the conversation.';
-                            return `✅ ${urls.length} booking links configured. The system picks one at random for each conversation to balance leads across your team.`;
+                            return `✅ ${urls.length} booking links configured. Each new lead gets the next rep in rotation, advancing only when a link is actually offered to a doctor.`;
                           })()}
                         </p>
                       )}
