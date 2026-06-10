@@ -16,23 +16,20 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const oneMinAgo = new Date(Date.now() - 60 * 1000).toISOString();
-
-  // Find conversations that have had visitor activity in the last hour AND
-  // either haven't been extracted yet, OR their most recent visitor message
-  // arrived AFTER the last extraction (so we catch late-arriving fields
-  // when extraction's previous run missed them). Widened from 5 min → 1 hour
-  // and dropped the status!=closed filter, because conversations frequently
-  // close right after the last visitor message and we'd lose late
-  // email/age/phone fields. The "last_extraction_at < last_visitor_message_at"
-  // condition keeps the workload bounded — we don't re-extract chats with
-  // nothing new.
+  // Find conversations that need extraction. Selection is now flag-based,
+  // not time-based: widget-save-message sets needs_extraction=true on every
+  // visitor message, this cron clears it back to false after each successful
+  // extraction. Net effect: extraction always catches up to the most recent
+  // visitor message, no matter when it arrived or whether the chat closed.
+  //
+  // 7-day safety bound on last_visitor_message_at keeps the query indexed
+  // and prevents stale flags on long-dead chats from being scanned forever.
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data: convos, error } = await supabase
     .from("conversations")
     .select("id, visitor_id, last_visitor_message_at, last_extraction_at")
-    .gt("last_visitor_message_at", oneHourAgo)
-    .or(`last_extraction_at.is.null,last_extraction_at.lt.${oneMinAgo}`)
+    .eq("needs_extraction", true)
+    .gt("last_visitor_message_at", sevenDaysAgo)
     .limit(100);
 
   if (error) {
@@ -82,10 +79,14 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Stamp last_extraction_at
+      // Stamp last_extraction_at AND clear needs_extraction. The flag will
+      // flip back to true on the next visitor message via widget-save-message.
+      // This is the "extract until caught up" loop: extraction only runs on
+      // conversations where the flag is true, and clearing it means we've
+      // processed every visitor message saved so far.
       await supabase
         .from("conversations")
-        .update({ last_extraction_at: new Date().toISOString() })
+        .update({ last_extraction_at: new Date().toISOString(), needs_extraction: false })
         .eq("id", conv.id);
 
       processed++;

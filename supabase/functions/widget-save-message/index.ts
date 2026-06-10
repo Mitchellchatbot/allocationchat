@@ -370,9 +370,15 @@ Deno.serve(async (req) => {
       updatePayload.status = "active";
     }
 
-    // Stamp last_visitor_message_at so the cron extraction job picks it up
+    // Stamp last_visitor_message_at AND set needs_extraction=true so the
+    // extraction cron knows there's a new message to process. Cleared back to
+    // false by extract-visitor-info once it completes a run. This is what
+    // gives "extract until no new info" semantics — every visitor message
+    // raises the flag, every extraction lowers it, and the cron only picks
+    // conversations where it's true.
     if (senderType === "visitor") {
       updatePayload.last_visitor_message_at = new Date().toISOString();
+      updatePayload.needs_extraction = true;
     }
 
     // Detect when the AI is asking the doctor for their phone number so a cron
