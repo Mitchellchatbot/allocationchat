@@ -16,18 +16,24 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const oneMinAgo = new Date(Date.now() - 60 * 1000).toISOString();
 
-  // Find conversations where visitor was active in the last 5 min
-  // and extraction hasn't run in the last 1 min
+  // Find conversations that have had visitor activity in the last hour AND
+  // either haven't been extracted yet, OR their most recent visitor message
+  // arrived AFTER the last extraction (so we catch late-arriving fields
+  // when extraction's previous run missed them). Widened from 5 min → 1 hour
+  // and dropped the status!=closed filter, because conversations frequently
+  // close right after the last visitor message and we'd lose late
+  // email/age/phone fields. The "last_extraction_at < last_visitor_message_at"
+  // condition keeps the workload bounded — we don't re-extract chats with
+  // nothing new.
   const { data: convos, error } = await supabase
     .from("conversations")
-    .select("id, visitor_id")
-    .gt("last_visitor_message_at", fiveMinAgo)
+    .select("id, visitor_id, last_visitor_message_at, last_extraction_at")
+    .gt("last_visitor_message_at", oneHourAgo)
     .or(`last_extraction_at.is.null,last_extraction_at.lt.${oneMinAgo}`)
-    .neq("status", "closed")
-    .limit(50);
+    .limit(100);
 
   if (error) {
     console.error("run-scheduled-extraction: query error", error);
