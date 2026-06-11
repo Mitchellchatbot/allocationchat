@@ -152,19 +152,38 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Check for existing open conversation
+      // Check for any recent conversation for this visitor, regardless of
+      // status. We used to require status != closed, which meant if a
+      // conversation closed (cron, manual close, race condition on initial
+      // creation) the next message from the same visitor created a brand-new
+      // conversation row — fragmenting the doctor's intake across two chats
+      // and starving the AI of context (e.g. Ambreen Rauf case: opened two
+      // tabs and got two separate conversations, each with half the info).
+      //
+      // 24-hour window lets us continue same-day chats while a doctor who
+      // returns a week later still gets a fresh conversation. If the matched
+      // conversation is closed, reopen it below.
+      const continueWindow = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: existingConv } = await supabase
         .from("conversations")
-        .select("id")
+        .select("id, status")
         .eq("property_id", propertyId)
         .eq("visitor_id", visitorId)
-        .neq("status", "closed")
+        .gt("created_at", continueWindow)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (existingConv?.id) {
         conversationId = existingConv.id;
+        // If it was previously closed, reopen so the dashboard surfaces it
+        // again and the AI re-engages naturally on the next visitor message.
+        if (existingConv.status === "closed") {
+          await supabase
+            .from("conversations")
+            .update({ status: "active" })
+            .eq("id", existingConv.id);
+        }
       } else {
         // Inherit property-level AI setting for new conversations
         const { data: propRow } = await supabase
