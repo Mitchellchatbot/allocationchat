@@ -561,7 +561,7 @@ Deno.serve(async (req) => {
         const calendlyUrl = await pickCalendlyForConversation(supabase, conversationId, calendlyOptions);
         if (calendlyUrl) {
           const fallbackContent =
-            `No problem at all if you'd prefer not to share your number. You can book a call at a time that's convenient for you using this link: ${calendlyUrl}`;
+            `No problem at all if you'd prefer not to share your number. You can book a zoom call at a time that's convenient for you using this link: ${calendlyUrl}`;
           const { error: declineInsertErr } = await supabase.from("messages").insert({
             conversation_id: conversationId,
             sender_id: "ai-bot",

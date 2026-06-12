@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
 
       // Compose the fallback message (mirrors the prompt's phone-decline copy)
       const followupContent =
-        `No problem at all if you'd prefer not to share your number. You can book a call at a time that's convenient for you using this link: ${calendlyUrl}`;
+        `No problem at all if you'd prefer not to share your number. You can book a zoom call at a time that's convenient for you using this link: ${calendlyUrl}`;
 
       // Next sequence number for this conversation
       const { data: maxSeq } = await supabase
