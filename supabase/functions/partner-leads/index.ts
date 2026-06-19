@@ -33,10 +33,11 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
-  // Exported leads = zoho_exports joined to the visitor record.
+  // Exported leads = zoho_exports joined to the visitor record. visitor_id is
+  // the stable key the dashboard uses to request per-lead detail.
   let q = supabase
     .from("zoho_exports")
-    .select("exported_at, zoho_lead_id, visitors!inner(name, email, phone, specialty, qualified, country_of_training)")
+    .select("exported_at, zoho_lead_id, visitor_id, visitors!inner(name, email, phone, specialty, qualified, country_of_training, location)")
     .order("exported_at", { ascending: false })
     .limit(5000);
   if (body.from) q = q.gte("exported_at", body.from);
@@ -48,11 +49,13 @@ serve(async (req) => {
   const leads = (data ?? []).map((r) => {
     const v = (Array.isArray(r.visitors) ? r.visitors[0] : r.visitors) ?? {} as Record<string, unknown>;
     return {
+      visitor_id:  (r.visitor_id ?? null) as string | null,
       name:        (v.name ?? null) as string | null,
       email:       (v.email ?? null) as string | null,
       phone:       (v.phone ?? null) as string | null,
       specialty:   (v.specialty ?? null) as string | null,
       country:     (v.country_of_training ?? null) as string | null,
+      location:    (v.location ?? null) as string | null,
       qualified:   (v.qualified ?? null) as boolean | null,
       exported_at: r.exported_at as string,
       zoho_lead_id:(r.zoho_lead_id ?? null) as string | null,
