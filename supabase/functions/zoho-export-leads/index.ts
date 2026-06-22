@@ -31,11 +31,19 @@ const QUALIFIED_COUNTRIES_REGEX = new RegExp(
   'i',
 );
 
+// We place medical DOCTORS only — non-doctor / allied-health roles are skipped
+// at export time regardless of country/age. Keep in sync with the identical
+// regex in extract-visitor-info and widget-save-message.
+const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
+
 // Retry backoff delays in minutes: attempt 1→5m, 2→30m, 3→2h, 4→8h, 5→give up
 const RETRY_DELAYS_MINUTES = [5, 30, 120, 480];
 const MAX_RETRIES = RETRY_DELAYS_MINUTES.length;
 
 function isQualified(visitor: Record<string, string | null>): boolean {
+  // Doctors only — a non-doctor role disqualifies regardless of country/age.
+  if (EXCLUDED_PROFESSIONS_REGEX.test(visitor.specialty || '')) return false;
+
   const country = (visitor.country_of_training || '');
   if (!QUALIFIED_COUNTRIES_REGEX.test(country)) return false;
   // Age no longer required; only fail if explicitly provided and outside 30-60

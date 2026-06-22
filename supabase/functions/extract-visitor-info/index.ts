@@ -39,6 +39,14 @@ const QUALIFIED_COUNTRIES_REGEX = new RegExp(
   'i',
 );
 
+// We place medical DOCTORS only. These non-doctor / allied-health roles are
+// disqualifying regardless of country or age. Matched against the extracted
+// `specialty` field (set by the Haiku extractor to the person's actual role),
+// NOT the raw transcript — so "doctor who works with nurses" won't false-fire.
+// Carefully excludes doctor titles that merely sound similar (radiologist,
+// physician, psychiatrist). Mirrored in widget-save-message; keep in sync.
+const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
+
 interface ExtractedInfo {
   name?: string;
   email?: string;
@@ -67,6 +75,10 @@ const cleanValue = (val?: string): string | undefined => {
 };
 
 function isQualified(visitor: Record<string, string | null>): boolean {
+  // Doctors only — a non-doctor role disqualifies regardless of country/age.
+  const specialty = (visitor.specialty || '');
+  if (EXCLUDED_PROFESSIONS_REGEX.test(specialty)) return false;
+
   const country = (visitor.country_of_training || '');
   if (!QUALIFIED_COUNTRIES_REGEX.test(country)) return false;
 

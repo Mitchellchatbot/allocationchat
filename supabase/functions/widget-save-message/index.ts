@@ -34,6 +34,19 @@ const CALENDLY_QUALIFIED_COUNTRIES_REGEX = new RegExp(
   'i',
 );
 
+// We place medical DOCTORS only. These non-doctor / allied-health roles are a
+// hard no regardless of country/age. Matched against the extracted `specialty`
+// DB field only (the Haiku extractor sets it to the person's actual role) — we
+// deliberately do NOT scan the raw transcript, same reasoning as the country
+// hard-stop below: "I'm a doctor who works with nurses" must not false-trigger.
+// Excludes doctor titles that merely sound similar (radiologist, physician,
+// psychiatrist). Mirrors EXCLUDED_PROFESSIONS_REGEX in extract-visitor-info.
+const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
+
+// Closer for the "doctors only" hard stop — distinct wording from the
+// country/age closer (HARD_STOP_CLOSER) since the reason is different.
+const NON_DOCTOR_CLOSER = "Thank you so much for reaching out! At the moment we specialize exclusively in placing doctors, so unfortunately it's not something we'd be able to help you with right now. We truly appreciate your interest and wish you all the best.";
+
 // Calendly rotation helper — same algorithm used in chat-ai and
 // send-phone-followup. Pick the next URL after the last one actually shown
 // to a doctor at this property; cache on the conversation row for consistency
@@ -303,10 +316,14 @@ Deno.serve(async (req) => {
       if (/calendly\.com\//i.test(cleanedContent)) {
         const { data: vRow } = await supabase
           .from("visitors")
-          .select("country_of_training, age")
+          .select("country_of_training, age, specialty")
           .eq("id", visitorId)
           .maybeSingle();
-        const v = (vRow as { country_of_training?: string | null; age?: string | null } | null) || {};
+        const v = (vRow as { country_of_training?: string | null; age?: string | null; specialty?: string | null } | null) || {};
+
+        // Doctors-only check — a non-doctor role should never see the booking
+        // link. DB specialty only (no transcript scan), same as the hard-stop.
+        const specialtyHardFail = EXCLUDED_PROFESSIONS_REGEX.test(v.specialty || '');
 
         // Pull the last ~10 visitor messages so we can spot age signals the
         // extractor hasn't processed yet (it runs every 2 min on a cron).
@@ -351,8 +368,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        if (ageHardFail || countryHardFail) {
-          console.log(`widget-save-message: stripping Calendly leak for ${visitorId} (ageHardFail=${ageHardFail}, countryHardFail=${countryHardFail})`);
+        if (ageHardFail || countryHardFail || specialtyHardFail) {
+          console.log(`widget-save-message: stripping Calendly leak for ${visitorId} (ageHardFail=${ageHardFail}, countryHardFail=${countryHardFail}, specialtyHardFail=${specialtyHardFail})`);
           // Replace the sentence containing the Calendly URL with a polite closer.
           // Anything before/after that sentence is kept so we don't lose other content.
           cleanedContent = cleanedContent.replace(
@@ -360,7 +377,9 @@ Deno.serve(async (req) => {
             ''
           ).trim();
           if (!cleanedContent) {
-            cleanedContent = "Thank you so much for your interest! Unfortunately, at the moment we specialize in working with doctors who hold Western-trained qualifications, so it's not something we'd be able to help with right now. We truly appreciate your time and wish you all the best.";
+            cleanedContent = specialtyHardFail
+              ? NON_DOCTOR_CLOSER
+              : "Thank you so much for your interest! Unfortunately, at the moment we specialize in working with doctors who hold Western-trained qualifications, so it's not something we'd be able to help with right now. We truly appreciate your time and wish you all the best.";
           }
         }
       }
@@ -438,10 +457,15 @@ Deno.serve(async (req) => {
 
       const { data: vRow } = await supabase
         .from("visitors")
-        .select("country_of_training, age")
+        .select("country_of_training, age, specialty")
         .eq("id", visitorId)
         .maybeSingle();
-      const v = (vRow as { country_of_training?: string | null; age?: string | null } | null) || {};
+      const v = (vRow as { country_of_training?: string | null; age?: string | null; specialty?: string | null } | null) || {};
+
+      // Doctors-only — a non-doctor / allied-health role is a hard stop. DB
+      // specialty only (set by the extractor), never the raw transcript, so a
+      // doctor mentioning nurses/technicians can't false-trigger.
+      const specialtyHardFail = EXCLUDED_PROFESSIONS_REGEX.test(v.specialty || '');
 
       // Age — DB first, then transcript regex. Skip if the number is followed
       // by a unit (kg/lbs/cm/etc.) to avoid false positives.
@@ -476,7 +500,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      if (ageHardFail || countryHardFail) {
+      if (ageHardFail || countryHardFail || specialtyHardFail) {
         // Don't double-post the closer if a previous turn already triggered it.
         // Per Mitch: after the closer, we keep replying briefly and warmly
         // (no permanent lockout) — so only suppress the AI on the turn we
@@ -491,19 +515,26 @@ Deno.serve(async (req) => {
           .order("sequence_number", { ascending: false })
           .limit(1)
           .maybeSingle();
-        const alreadyClosed = !!lastAgent && /specialize in working with doctors who hold western[- ]trained qualifications/i.test((lastAgent as { content: string }).content);
+        const lastAgentText = lastAgent ? (lastAgent as { content: string }).content : '';
+        const alreadyClosed = !!lastAgent && (
+          /specialize in working with doctors who hold western[- ]trained qualifications/i.test(lastAgentText) ||
+          /specialize exclusively in placing doctors/i.test(lastAgentText)
+        );
+        // Country/age vs profession use different closer wording. Profession
+        // takes precedence when both apply (it's the more specific reason).
+        const closerContent = specialtyHardFail ? NON_DOCTOR_CLOSER : HARD_STOP_CLOSER;
         if (!alreadyClosed) {
           const { error: closerErr } = await supabase.from("messages").insert({
             conversation_id: conversationId,
             sender_id: "ai-bot",
             sender_type: "agent",
-            content: HARD_STOP_CLOSER,
+            content: closerContent,
             sequence_number: nextSeq + 1,
           });
           if (closerErr) {
             console.error("widget-save-message: hard-stop closer insert failed", closerErr);
           } else {
-            console.log(`widget-save-message: hard-stop closer posted for ${visitorId} (ageHardFail=${ageHardFail}, countryHardFail=${countryHardFail}, age=${ageNum}, country=${dbCountry})`);
+            console.log(`widget-save-message: hard-stop closer posted for ${visitorId} (ageHardFail=${ageHardFail}, countryHardFail=${countryHardFail}, specialtyHardFail=${specialtyHardFail}, age=${ageNum}, country=${dbCountry}, specialty=${v.specialty || ''})`);
             // Only skip the AI for THIS turn — the one where we just posted
             // the closer. Subsequent turns from the same doctor get the
             // normal AI response so the chat doesn't feel dead.
