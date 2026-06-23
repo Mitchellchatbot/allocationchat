@@ -87,55 +87,44 @@ export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTa
   const fetchVisitors = async () => {
     setLoading(true);
     const isAll = allPropertyIds && allPropertyIds.length > 0;
-    let query = supabase.from('conversations').select('visitor_id');
-    if (isAll) {
-      query = query.in('property_id', allPropertyIds);
-    } else {
-      query = query.eq('property_id', propertyId);
-    }
-    const { data: conversations } = await query;
-    const visitorIds = [...new Set((conversations || []).map(c => c.visitor_id))];
 
-    if (visitorIds.length === 0) {
-      setVisitors([]);
-      setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase
+    // Filter visitors by property server-side via the conversations FK, so we
+    // never build a giant `id=in.(...)` URL from a client-side ID list (which
+    // grows unbounded with the conversations table and eventually 400s the
+    // request once the URL exceeds the gateway's URI limit).
+    let query = supabase
       .from('visitors')
-      .select('id, name, email, phone, age, specialty, country_of_training, qualification_date, qualified, speaks_arabic, location, gclid, created_at')
-      .in('id', visitorIds)
-      .order('created_at', { ascending: false });
+      .select('id, name, email, phone, age, specialty, country_of_training, qualification_date, qualified, speaks_arabic, location, gclid, created_at, conversations!inner(property_id)')
+      .order('created_at', { ascending: false }) as any;
+    if (isAll) {
+      query = query.in('conversations.property_id', allPropertyIds);
+    } else {
+      query = query.eq('conversations.property_id', propertyId);
+    }
+    const { data, error } = await query;
 
     if (error) {
       toast.error('Failed to load leads');
     } else {
-      setVisitors((data || []) as Visitor[]);
+      // Drop the embedded `conversations` join column before storing.
+      const rows = ((data || []) as any[]).map(({ conversations, ...v }) => v);
+      setVisitors(rows as Visitor[]);
     }
     setLoading(false);
   };
 
   const fetchExportedVisitors = async () => {
-    const isAll = allPropertyIds && allPropertyIds.length > 0;
-    let query = supabase.from('conversations').select('id, visitor_id');
-    if (isAll) {
-      query = query.in('property_id', allPropertyIds);
-    } else {
-      query = query.eq('property_id', propertyId);
-    }
-    const { data: conversations } = await query;
+    // zoho_exports is RLS-scoped to the current user's own properties and has a
+    // UNIQUE(visitor_id) row per export, so we can fetch the set directly with
+    // no client-side ID filter. exportedIds is only used as a membership lookup
+    // against the displayed visitors, so any rows from the user's other
+    // properties are harmless.
+    const { data: exports } = await supabase
+      .from('zoho_exports' as any)
+      .select('visitor_id');
 
-    if (conversations && conversations.length > 0) {
-      const visitorIds = conversations.map(c => c.visitor_id);
-      const { data: exports } = await supabase
-        .from('zoho_exports' as any)
-        .select('visitor_id')
-        .in('visitor_id', visitorIds);
-
-      if (exports) {
-        setExportedIds(new Set((exports as any[]).map(e => e.visitor_id)));
-      }
+    if (exports) {
+      setExportedIds(new Set((exports as any[]).map(e => e.visitor_id)));
     }
   };
 
