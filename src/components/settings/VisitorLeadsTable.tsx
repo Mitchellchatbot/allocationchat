@@ -41,10 +41,24 @@ interface Visitor {
   country_of_training: string | null;
   qualification_date: string | null;
   qualified: boolean | null;
+  speaks_arabic: boolean | null;
   location: string | null;
   gclid: string | null;
   created_at: string;
 }
+
+// Family Medicine / GP doctors are only placed if they speak Arabic. Mirrors
+// FAMILY_GP_REGEX in extract-visitor-info / zoho-export-leads / widget-save-message.
+const FAMILY_GP_REGEX = /(\bfamily\s+(?:medicine|physician|practice|practitioner|doctor)\b|\bgeneral\s+(?:practice|practitioner|physician)\b|\bgp\b|\bprimary\s+care\b)/i;
+const isFamilyOrGp = (specialty: string | null) => FAMILY_GP_REGEX.test(specialty || '');
+
+// Effective qualification shown in the dashboard. The stored `qualified` flag is
+// recomputed server-side, but we also downgrade Family Medicine / GP doctors who
+// haven't confirmed Arabic so the badge matches what the exporter will actually do.
+const effectiveQualified = (v: Visitor): boolean | null => {
+  if (isFamilyOrGp(v.specialty) && v.speaks_arabic !== true) return false;
+  return v.qualified;
+};
 
 export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTableProps) => {
   const [visitors, setVisitors] = useState<Visitor[]>([]);
@@ -59,8 +73,9 @@ export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTa
   const filteredVisitors = visitors.filter(v => {
     if (phoneFilter === 'with' && !v.phone) return false;
     if (phoneFilter === 'without' && v.phone) return false;
-    if (qualFilter === 'qualified' && v.qualified !== true) return false;
-    if (qualFilter === 'unqualified' && v.qualified !== false) return false;
+    const qual = effectiveQualified(v);
+    if (qualFilter === 'qualified' && qual !== true) return false;
+    if (qualFilter === 'unqualified' && qual !== false) return false;
     return true;
   });
 
@@ -89,7 +104,7 @@ export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTa
 
     const { data, error } = await supabase
       .from('visitors')
-      .select('id, name, email, phone, age, specialty, country_of_training, qualification_date, qualified, location, gclid, created_at')
+      .select('id, name, email, phone, age, specialty, country_of_training, qualification_date, qualified, speaks_arabic, location, gclid, created_at')
       .in('id', visitorIds)
       .order('created_at', { ascending: false });
 
@@ -232,11 +247,12 @@ export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTa
       return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
     };
 
-    const headers = ['Name', 'Email', 'Phone', 'Age', 'Specialty', 'Country of Training', 'Qualified', 'Location', 'GCLID', 'Zoho Status', 'Date'];
+    const headers = ['Name', 'Email', 'Phone', 'Age', 'Specialty', 'Country of Training', 'Speaks Arabic', 'Qualified', 'Location', 'GCLID', 'Zoho Status', 'Date'];
     const csvRows = rows.map(v => [
       escape(v.name), escape(v.email), escape(v.phone), escape(v.age),
       escape(v.specialty), escape(v.country_of_training),
-      v.qualified === true ? 'Qualified' : v.qualified === false ? 'Unqualified' : 'Pending',
+      v.speaks_arabic === true ? 'Yes' : v.speaks_arabic === false ? 'No' : 'Unknown',
+      effectiveQualified(v) === true ? 'Qualified' : effectiveQualified(v) === false ? 'Unqualified' : 'Pending',
       escape(v.location), escape(v.gclid),
       exportedIds.has(v.id) ? 'Exported' : 'Not Exported',
       new Date(v.created_at).toLocaleDateString(),
@@ -382,10 +398,19 @@ export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTa
                         {!visitor.email && !visitor.phone && <span className="text-muted-foreground">—</span>}
                       </div>
                     </TableCell>
-                    <TableCell>{visitor.specialty || <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div>{visitor.specialty || <span className="text-muted-foreground">—</span>}</div>
+                        {isFamilyOrGp(visitor.specialty) && (
+                          <div className="text-xs text-muted-foreground">
+                            Arabic: {visitor.speaks_arabic === true ? 'Yes' : visitor.speaks_arabic === false ? 'No' : 'Unknown'}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{visitor.country_of_training || <span className="text-muted-foreground">—</span>}</TableCell>
                     <TableCell>{visitor.age || <span className="text-muted-foreground">—</span>}</TableCell>
-                    <TableCell>{getQualBadge(visitor.qualified)}</TableCell>
+                    <TableCell>{getQualBadge(effectiveQualified(visitor))}</TableCell>
                     <TableCell>
                       {exportedIds.has(visitor.id) ? (
                         <Badge variant="outline" className="text-green-600 border-green-600">Exported</Badge>

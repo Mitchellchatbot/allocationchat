@@ -47,6 +47,12 @@ const QUALIFIED_COUNTRIES_REGEX = new RegExp(
 // physician, psychiatrist). Mirrored in widget-save-message; keep in sync.
 const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
 
+// Family Medicine / General Practice doctors are only placed if they speak
+// Arabic — this gate applies to NO other specialty. Matched against the
+// extracted `specialty` field. Keep in sync with zoho-export-leads,
+// widget-save-message, and the dashboard's VisitorLeadsTable.
+const FAMILY_GP_REGEX = /(\bfamily\s+(?:medicine|physician|practice|practitioner|doctor)\b|\bgeneral\s+(?:practice|practitioner|physician)\b|\bgp\b|\bprimary\s+care\b)/i;
+
 interface ExtractedInfo {
   name?: string;
   email?: string;
@@ -56,6 +62,7 @@ interface ExtractedInfo {
   country_of_training?: string;
   qualification_date?: string;
   booking_call_required?: boolean;
+  speaks_arabic?: boolean;
 }
 
 // String fields — only set if non-placeholder values are extracted.
@@ -74,16 +81,21 @@ const cleanValue = (val?: string): string | undefined => {
   return val;
 };
 
-function isQualified(visitor: Record<string, string | null>): boolean {
+function isQualified(visitor: Record<string, unknown>): boolean {
   // Doctors only — a non-doctor role disqualifies regardless of country/age.
-  const specialty = (visitor.specialty || '');
+  const specialty = String(visitor.specialty || '');
   if (EXCLUDED_PROFESSIONS_REGEX.test(specialty)) return false;
 
-  const country = (visitor.country_of_training || '');
+  // Family Medicine / GP — only Arabic-speaking candidates. Unknown (null)
+  // counts as not-yet-qualified, so these leads aren't exported until the
+  // doctor has confirmed they speak Arabic.
+  if (FAMILY_GP_REGEX.test(specialty) && visitor.speaks_arabic !== true) return false;
+
+  const country = String(visitor.country_of_training || '');
   if (!QUALIFIED_COUNTRIES_REGEX.test(country)) return false;
 
   // Age is no longer required, but if it was provided and falls outside 30-60, treat as unqualified.
-  const ageRaw = visitor.age?.trim();
+  const ageRaw = String(visitor.age ?? '').trim();
   if (ageRaw) {
     const age = parseInt(ageRaw);
     if (!isNaN(age) && (age < 30 || age > 60)) return false;
@@ -140,7 +152,7 @@ Deno.serve(async (req) => {
 
     const { data: visitor } = await supabase
       .from('visitors')
-      .select('name, email, phone, age, specialty, country_of_training, qualification_date, booking_call_required')
+      .select('name, email, phone, age, specialty, country_of_training, qualification_date, booking_call_required, speaks_arabic')
       .eq('id', visitorId)
       .single();
 
@@ -163,7 +175,9 @@ Deno.serve(async (req) => {
         max_tokens: 512,
         system: `You are an information extraction assistant. Analyze the conversation and extract any personal information the doctor has shared naturally. Only extract information that was explicitly stated by the user (doctor messages), not inferred. If information is not clearly stated, do NOT include it — leave the field out entirely. Never return placeholder values like "N/A", "none", "unknown", or empty strings.
 
-For booking_call_required: set this to true ONLY if the AI asked the doctor for their phone/mobile number AND the doctor either (a) explicitly declined (e.g. "no", "I'd rather not", "I don't want to share that") or (b) deflected the question and never came back to it. Do NOT set it true if the doctor did share a phone number, or if the phone question hasn't been asked yet. Leave the field unset (omit it) when the answer is unclear.`,
+For booking_call_required: set this to true ONLY if the AI asked the doctor for their phone/mobile number AND the doctor either (a) explicitly declined (e.g. "no", "I'd rather not", "I don't want to share that") or (b) deflected the question and never came back to it. Do NOT set it true if the doctor did share a phone number, or if the phone question hasn't been asked yet. Leave the field unset (omit it) when the answer is unclear.
+
+For speaks_arabic: set to true if the doctor indicated they speak Arabic, or false if they indicated they do NOT speak Arabic. Only set it when language was explicitly discussed — leave the field unset (omit it) otherwise.`,
         messages: [
           {
             role: 'user',
@@ -185,6 +199,7 @@ For booking_call_required: set this to true ONLY if the AI asked the doctor for 
                 country_of_training: { type: 'string', description: "The country where the doctor completed their medical training" },
                 qualification_date: { type: 'string', description: "The date or year the doctor obtained their specialty qualification (e.g. '2015', 'June 2018')" },
                 booking_call_required: { type: 'boolean', description: "True if the doctor declined to share their phone number, or was asked for it and didn't reply with one. Leave unset otherwise." },
+                speaks_arabic: { type: 'boolean', description: "True if the doctor said they speak Arabic, false if they said they do not. Leave unset if language was not discussed." },
               },
               additionalProperties: false,
             },
@@ -238,6 +253,14 @@ For booking_call_required: set this to true ONLY if the AI asked the doctor for 
       (updates as any).booking_call_required = true;
     }
 
+    // speaks_arabic — gates Family Medicine / GP qualification. Unlike the
+    // booking flag, this can move both ways (a doctor who first said "no" may
+    // clarify later), so update whenever the newly-extracted value differs from
+    // what's stored. Only ever set from an explicit boolean (never from omit).
+    if (typeof extractedInfo.speaks_arabic === 'boolean' && (visitor as any)?.speaks_arabic !== extractedInfo.speaks_arabic) {
+      (updates as any).speaks_arabic = extractedInfo.speaks_arabic;
+    }
+
     if (Object.keys(updates).length === 0) {
       return new Response(JSON.stringify({ extracted: false }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -256,10 +279,15 @@ For booking_call_required: set this to true ONLY if the AI asked the doctor for 
     }
 
     // Recompute qualification using merged data
-    const merged = { ...visitor, ...updates } as Record<string, string | null>;
-    const hasQualFields = !isPlaceholder(merged.country_of_training) && !isPlaceholder(merged.age);
+    const merged = { ...visitor, ...updates } as Record<string, unknown>;
+    const hasQualFields = !isPlaceholder(merged.country_of_training as string | null) && !isPlaceholder(merged.age as string | null);
+    // Family Medicine / GP qualification hinges on the Arabic signal, which can
+    // arrive on a turn where neither country nor age is shared — so also
+    // recompute whenever we have a country for one of those specialties.
+    const isFamilyGp = FAMILY_GP_REGEX.test(String(merged.specialty || ''));
+    const recompute = hasQualFields || (isFamilyGp && !isPlaceholder(merged.country_of_training as string | null));
 
-    if (hasQualFields) {
+    if (recompute) {
       const qualified = isQualified(merged);
       await supabase.from('visitors').update({ qualified }).eq('id', visitorId);
       console.log(`Visitor ${visitorId} qualified: ${qualified}`);

@@ -1186,6 +1186,7 @@ export type Database = {
           qualified: boolean | null
           session_id: string
           specialty: string | null
+          speaks_arabic: boolean | null
         }
         Insert: {
           age?: string | null
@@ -1203,6 +1204,7 @@ export type Database = {
           qualified?: boolean | null
           session_id: string
           specialty?: string | null
+          speaks_arabic?: boolean | null
         }
         Update: {
           age?: string | null
@@ -1220,6 +1222,7 @@ export type Database = {
           qualified?: boolean | null
           session_id?: string
           specialty?: string | null
+          speaks_arabic?: boolean | null
         }
         Relationships: [
           {

@@ -36,18 +36,28 @@ const QUALIFIED_COUNTRIES_REGEX = new RegExp(
 // regex in extract-visitor-info and widget-save-message.
 const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
 
+// Family Medicine / GP doctors are only placed if they speak Arabic — applies
+// to no other specialty. Keep in sync with extract-visitor-info and
+// widget-save-message.
+const FAMILY_GP_REGEX = /(\bfamily\s+(?:medicine|physician|practice|practitioner|doctor)\b|\bgeneral\s+(?:practice|practitioner|physician)\b|\bgp\b|\bprimary\s+care\b)/i;
+
 // Retry backoff delays in minutes: attempt 1→5m, 2→30m, 3→2h, 4→8h, 5→give up
 const RETRY_DELAYS_MINUTES = [5, 30, 120, 480];
 const MAX_RETRIES = RETRY_DELAYS_MINUTES.length;
 
-function isQualified(visitor: Record<string, string | null>): boolean {
+function isQualified(visitor: Record<string, unknown>): boolean {
   // Doctors only — a non-doctor role disqualifies regardless of country/age.
-  if (EXCLUDED_PROFESSIONS_REGEX.test(visitor.specialty || '')) return false;
+  const specialty = String(visitor.specialty || '');
+  if (EXCLUDED_PROFESSIONS_REGEX.test(specialty)) return false;
 
-  const country = (visitor.country_of_training || '');
+  // Family Medicine / GP — Arabic-speaking candidates only. Unknown counts as
+  // not-yet-qualified, so we never export until Arabic is confirmed.
+  if (FAMILY_GP_REGEX.test(specialty) && visitor.speaks_arabic !== true) return false;
+
+  const country = String(visitor.country_of_training || '');
   if (!QUALIFIED_COUNTRIES_REGEX.test(country)) return false;
   // Age no longer required; only fail if explicitly provided and outside 30-60
-  const ageRaw = visitor.age?.trim();
+  const ageRaw = String(visitor.age ?? '').trim();
   if (ageRaw) {
     const age = parseInt(ageRaw);
     if (!isNaN(age) && (age < 30 || age > 60)) return false;
@@ -508,7 +518,7 @@ Deno.serve(async (req) => {
 
       const { data: visitor } = await supabase
         .from("visitors")
-        .select("name, email, phone, age, specialty, country_of_training, qualification_date, qualified, booking_call_required")
+        .select("name, email, phone, age, specialty, country_of_training, qualification_date, qualified, booking_call_required, speaks_arabic")
         .eq("id", visitorId)
         .single();
 
