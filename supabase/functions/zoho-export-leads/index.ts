@@ -500,7 +500,7 @@ Deno.serve(async (req) => {
     // skipped is the legacy total (unqualified + already exported) — kept for
     // back-compat with any caller reading it. alreadyExported and
     // skippedUnqualified are the new, accurate breakdown.
-    const results = { exported: 0, skipped: 0, alreadyExported: 0, skippedUnqualified: 0, errors: [] as string[] };
+    const results = { exported: 0, skipped: 0, alreadyExported: 0, skippedUnqualified: 0, duplicates: 0, errors: [] as string[] };
 
     for (const visitorId of targetVisitorIds) {
       // Skip if already successfully exported
@@ -624,6 +624,24 @@ Deno.serve(async (req) => {
         .eq("status", "pending");
 
       results.exported++;
+
+      // When Zoho matched the doctor to an existing (older) lead instead of
+      // creating a new one, alert the team so they can review/re-qualify it.
+      // Fire-and-forget — a notification failure must not fail the export.
+      if ((result as { duplicate?: boolean }).duplicate) {
+        results.duplicates++;
+        supabase.functions.invoke("send-email-notification", {
+          body: {
+            propertyId: targetPropertyId,
+            eventType: "crm_duplicate",
+            visitorName: visitor.name,
+            visitorEmail: visitor.email,
+            visitorPhone: visitor.phone,
+            conversationId: conv?.id || "",
+            zohoLeadId: result.id,
+          },
+        }).catch((e: unknown) => console.error("crm_duplicate email error:", e));
+      }
     }
 
     return new Response(JSON.stringify(results), {

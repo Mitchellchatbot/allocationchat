@@ -278,14 +278,15 @@ For speaks_arabic: set to true if the doctor indicated they speak Arabic, or fal
       console.error('Error updating visitor:', updateError);
     }
 
-    // Recompute qualification using merged data
+    // Recompute qualification using merged data. Country of training is the
+    // binding signal — isQualified() treats age as optional (it only fails on an
+    // age that's explicitly provided AND out of range), so we must NOT wait for
+    // an age that many doctors never share. Previously this gate required both
+    // country AND age, which left qualified=NULL forever for doctors like a
+    // US-trained endocrinologist who gave a country but no age. Recompute as
+    // soon as we have a country; the Family/GP Arabic gate is also covered then.
     const merged = { ...visitor, ...updates } as Record<string, unknown>;
-    const hasQualFields = !isPlaceholder(merged.country_of_training as string | null) && !isPlaceholder(merged.age as string | null);
-    // Family Medicine / GP qualification hinges on the Arabic signal, which can
-    // arrive on a turn where neither country nor age is shared — so also
-    // recompute whenever we have a country for one of those specialties.
-    const isFamilyGp = FAMILY_GP_REGEX.test(String(merged.specialty || ''));
-    const recompute = hasQualFields || (isFamilyGp && !isPlaceholder(merged.country_of_training as string | null));
+    const recompute = !isPlaceholder(merged.country_of_training as string | null);
 
     if (recompute) {
       const qualified = isQualified(merged);

@@ -9,12 +9,14 @@ const corsHeaders = {
 
 interface NotificationRequest {
   propertyId: string;
-  eventType: "new_conversation" | "escalation" | "phone_submission";
+  eventType: "new_conversation" | "escalation" | "phone_submission" | "crm_duplicate";
   visitorName?: string;
   visitorEmail?: string;
   visitorPhone?: string;
   conversationId: string;
   message?: string;
+  // crm_duplicate only: the id of the existing Zoho lead the export matched.
+  zohoLeadId?: string;
 }
 
 Deno.serve(async (req) => {
@@ -36,9 +38,11 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { propertyId, eventType, visitorName, visitorEmail, visitorPhone, conversationId, message }: NotificationRequest = await req.json();
+    const { propertyId, eventType, visitorName, visitorEmail, visitorPhone, conversationId, message, zohoLeadId }: NotificationRequest = await req.json();
 
-    if (!propertyId || !eventType || !conversationId) {
+    // crm_duplicate fires from the Zoho export path, where a conversation isn't
+    // always resolvable — so it's the only event that doesn't require one.
+    if (!propertyId || !eventType || (!conversationId && eventType !== "crm_duplicate")) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -92,6 +96,13 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    // Treat a missing column (env not yet migrated) as enabled — only an
+    // explicit false suppresses the CRM-duplicate review alert.
+    if (eventType === "crm_duplicate" && settings.notify_on_crm_duplicate === false) {
+      return new Response(JSON.stringify({ skipped: true, reason: "event_disabled" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Fetch property name for the email
     const { data: property } = await supabase
@@ -106,12 +117,15 @@ Deno.serve(async (req) => {
     // Build email content
     const isEscalation = eventType === "escalation";
     const isPhoneSubmission = eventType === "phone_submission";
-    
+    const isCrmDuplicate = eventType === "crm_duplicate";
+
     let subject: string;
     if (isEscalation) {
       subject = `🔴 Escalation Alert — ${propertyName}`;
     } else if (isPhoneSubmission) {
       subject = `📞 Phone Number Captured — ${propertyName}`;
+    } else if (isCrmDuplicate) {
+      subject = `🟢 Existing CRM Lead Re-applied — ${propertyName}`;
     } else {
       subject = `💬 New Conversation — ${propertyName}`;
     }
@@ -125,7 +139,13 @@ Deno.serve(async (req) => {
     let bannerTitle: string;
     let bannerDescription: string;
 
-    if (isEscalation) {
+    if (isCrmDuplicate) {
+      bannerGradient = "linear-gradient(135deg,#f0fdf4,#dcfce7)";
+      bannerBorder = "#22c55e";
+      bannerColor = "#16a34a";
+      bannerTitle = "Existing CRM Lead Re-applied";
+      bannerDescription = "A doctor applied through the chatbot, but their email or phone already exists in Zoho as an older lead. Review whether it needs re-qualifying.";
+    } else if (isEscalation) {
       bannerGradient = "linear-gradient(135deg,#fef2f2,#fee2e2)";
       bannerBorder = "#ef4444";
       bannerColor = "#dc2626";
@@ -147,6 +167,14 @@ Deno.serve(async (req) => {
 
     const phoneRow = visitorPhone
       ? `<tr><td style="padding:8px 0;color:#888;width:120px;">Phone</td><td style="padding:8px 0;font-weight:600;">${visitorPhone}</td></tr>`
+      : "";
+
+    // crm_duplicate surfaces the matched contact + a jump link to the existing lead.
+    const emailRow = (isCrmDuplicate && visitorEmail)
+      ? `<tr><td style="padding:8px 0;color:#888;width:120px;">Email</td><td style="padding:8px 0;font-weight:600;">${visitorEmail}</td></tr>`
+      : "";
+    const zohoLinkRow = (isCrmDuplicate && zohoLeadId)
+      ? `<tr><td style="padding:8px 0;color:#888;">Existing lead</td><td style="padding:8px 0;"><a href="https://crm.zoho.com/crm/tab/Leads/${zohoLeadId}" style="color:#16a34a;font-weight:600;">Open in Zoho →</a></td></tr>`
       : "";
 
     const html = `
@@ -172,7 +200,9 @@ Deno.serve(async (req) => {
             <td style="padding:8px 0;color:#888;width:120px;">Visitor</td>
             <td style="padding:8px 0;font-weight:600;">${visitorLabel}</td>
           </tr>
+          ${emailRow}
           ${phoneRow}
+          ${zohoLinkRow}
           <tr>
             <td style="padding:8px 0;color:#888;">Property</td>
             <td style="padding:8px 0;">${propertyName} (${propertyDomain})</td>
