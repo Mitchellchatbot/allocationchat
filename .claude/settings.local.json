@@ -21,7 +21,9 @@
       "Bash(git config *)",
       "Bash(git push *)",
       "Bash(supabase migration *)",
-      "Bash(grep -rEo \"\\(https://[a-z0-9]+\\\\.supabase\\\\.co|eyJ[A-Za-z0-9_-]{20,}\\)\" src/integrations/supabase/client.ts)"
+      "Bash(grep -rEo \"\\(https://[a-z0-9]+\\\\.supabase\\\\.co|eyJ[A-Za-z0-9_-]{20,}\\)\" src/integrations/supabase/client.ts)",
+      "Bash(npm run *)",
+      "Bash(npx vite *)"
     ]
   }
 }
