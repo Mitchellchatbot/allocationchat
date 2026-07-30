@@ -27,3 +27,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local Claude Code settings (can contain secrets) — note *.local above does NOT
+# match *.local.json, so this must be listed explicitly
+.claude/settings.local.json
+
+# Supabase CLI temp/state files
+supabase/.temp/
