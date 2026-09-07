@@ -15,7 +15,8 @@ const corsHeaders = {
 const CALENDLY_QUALIFIED_COUNTRIES = [
   'europe', 'south america', 'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   'belize', 'costa rica', 'el salvador', 'guatemala', 'honduras', 'nicaragua', 'panama',
-  'japan', 'south korea', 'republic of korea', 'singapore', 'turkey', 'türkiye', 'turkiye', 'cuba',
+  'japan', 'japanese', 'south korea', 'republic of korea', 'korea', 'korean',
+  'singapore', 'turkey', 'türkiye', 'turkiye', 'cuba',
   'méxico', 'perú', 'panamá',
   'uae', 'united arab emirates', 'emirates', 'dubai', 'abu dhabi',
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
@@ -34,19 +35,65 @@ const CALENDLY_QUALIFIED_COUNTRIES_REGEX = new RegExp(
   'i',
 );
 
-// We place medical DOCTORS only. These non-doctor / allied-health roles are a
-// hard no regardless of country/age. Matched against the extracted `specialty`
-// DB field only (the Haiku extractor sets it to the person's actual role) — we
-// deliberately do NOT scan the raw transcript, same reasoning as the country
-// hard-stop below: "I'm a doctor who works with nurses" must not false-trigger.
-// Excludes doctor titles that merely sound similar (radiologist, physician,
-// psychiatrist). Mirrors EXCLUDED_PROFESSIONS_REGEX in extract-visitor-info.
+// Bare "Korea"/"Korean" count as South Korea (doctors rarely write the full
+// name), but those words also sit inside "North Korea", which is NOT qualified.
+// This exclusion is checked first and wins. Mirrored in extract-visitor-info
+// and zoho-export-leads; keep in sync.
+const UNQUALIFIED_OVERRIDE_REGEX = /\bnorth\s*korean?\b/i;
+
+const isQualifiedCountry = (country: string): boolean =>
+  !!country && !UNQUALIFIED_OVERRIDE_REGEX.test(country) && CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(country);
+
+// Strip explicitly-unqualified country names before scanning a free-text
+// transcript for a "qualified place" mention, so "I trained in North Korea"
+// can't satisfy the bare "korea" entry above.
+const scrubUnqualified = (text: string): string => text.replace(/\bnorth\s*korean?\b/gi, ' ');
+
+// We place medical DOCTORS (and clinical psychologists) only. Other non-doctor
+// / allied-health roles are a hard no regardless of country/age. Matched
+// against the extracted `specialty` DB field only (the Haiku extractor sets it
+// to the person's actual role) — we deliberately do NOT scan the raw
+// transcript, same reasoning as the country hard-stop below: "I'm a doctor who
+// works with nurses" must not false-trigger. Excludes titles that merely sound
+// similar (radiologist, physician). NOTE: psychiatrists AND clinical
+// psychologists are both accepted — do not add "psychologist" here.
+// Mirrors EXCLUDED_PROFESSIONS_REGEX in extract-visitor-info.
 const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
 
 // Family Medicine / GP doctors are only placed if they speak Arabic — applies
 // to no other specialty. Matched against the extracted `specialty` DB field.
 // Keep in sync with extract-visitor-info and zoho-export-leads.
 const FAMILY_GP_REGEX = /(\bfamily\s+(?:medicine|physician|practice|practitioner|doctor)\b|\bgeneral\s+(?:practice|practitioner|physician)\b|\bgp\b|\bprimary\s+care\b)/i;
+
+// Pull an explicitly-stated age out of free text. Deliberately conservative: a
+// number only counts as an age when it is stated as one ("42 years old",
+// "I'm 42"). Durations like "25 years of experience" are NOT ages — reading one
+// as an age wrongly hard-stops senior doctors, so anything followed by
+// experience/practice wording (or a unit like kg) is skipped. Returns NaN when
+// no age was clearly stated.
+const AGE_UNIT_SUFFIX_REGEX = /^\s*(?:kg|kgs|kilograms?|lbs|pounds?|cm|inches|in|feet|ft|hours?|mins?|minutes?|seconds?|days?|weeks?|months?)\b/i;
+// In the loose "I'm 42" form, a trailing "years"/"yrs" that isn't "years old"
+// means the number is a duration — "25 years of experience", "25 years into my
+// career", "25 years in practice". The genuine "42 years old" phrasing is
+// already matched by the explicit pattern above, so it never reaches here.
+const AGE_DURATION_SUFFIX_REGEX = /^\s*(?:years?|yrs?)\b(?!\s*old)/i;
+
+function extractStatedAge(text: string): number {
+  // Unambiguous forms: "42 years old", "42 yrs old", "42yo", "42 y/o".
+  const explicit = text.match(/\b(\d{2,3})\s*(?:years?\s*old|yrs?\s*old|y\.?\s*o\.?|y\/o)\b/i);
+  if (explicit) return parseInt(explicit[1], 10);
+
+  // Looser forms: "I'm 42", "age 42". Scan every occurrence so one false
+  // positive early in the transcript doesn't mask a real age later on.
+  const loose = /\b(?:i'?m|im|age|aged)\s+(\d{2,3})\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = loose.exec(text)) !== null) {
+    const rest = text.slice(m.index + m[0].length);
+    if (AGE_UNIT_SUFFIX_REGEX.test(rest) || AGE_DURATION_SUFFIX_REGEX.test(rest)) continue;
+    return parseInt(m[1], 10);
+  }
+  return NaN;
+}
 
 // Closer for the "doctors only" hard stop — distinct wording from the
 // country/age closer (HARD_STOP_CLOSER) since the reason is different.
@@ -352,19 +399,14 @@ Deno.serve(async (req) => {
         // Age check — DB first, then transcript regex
         const dbAge = v.age ? parseInt(String(v.age).trim(), 10) : NaN;
         let ageNum = isNaN(dbAge) ? NaN : dbAge;
-        if (isNaN(ageNum)) {
-          // "66 years old", "66yo", "66 y/o", "I'm 66", "age 66"
-          const ageMatch = transcript.match(/\b(\d{2,3})\s*(?:years?\s*old|yrs?\s*old|y\.?\s*o\.?|y\/o)\b/i)
-            || transcript.match(/\b(?:i'?m|im|age|aged)\s+(\d{2,3})\b/i);
-          if (ageMatch) ageNum = parseInt(ageMatch[1], 10);
-        }
+        if (isNaN(ageNum)) ageNum = extractStatedAge(transcript);
         const ageHardFail = !isNaN(ageNum) && (ageNum < 30 || ageNum > 60);
 
         // Country check — extracted country must be in the qualified regex.
         // If extraction hasn't run yet, transcript-scan for obvious bad words.
         const dbCountry = (v.country_of_training || '').toLowerCase();
         const NON_QUALIFIED_KEYWORDS = /\b(india|pakistan|bangladesh|sri\s*lanka|nepal|afghanistan|iran|iraq|syria|lebanon|jordan|israel|palestine|saudi\s*arabia|qatar|kuwait|bahrain|oman|yemen|egypt|sudan|libya|morocco|algeria|tunisia|ethiopia|kenya|uganda|tanzania|nigeria|ghana|cameroon|zimbabwe|zambia|china|north\s*korea|mongolia|taiwan|hong\s*kong|vietnam|thailand|indonesia|malaysia|philippines|myanmar|burma|cambodia|laos|russia|kazakhstan|uzbekistan|jamaica|haiti)\b/i;
-        const dbCountryHardFail = dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
+        const dbCountryHardFail = !!dbCountry && !isQualifiedCountry(dbCountry);
         const transcriptCountryHardFail = !dbCountry && NON_QUALIFIED_KEYWORDS.test(transcript);
         let countryHardFail = dbCountryHardFail || transcriptCountryHardFail;
 
@@ -373,7 +415,7 @@ Deno.serve(async (req) => {
         // context) the doctor is in fact qualified despite their training
         // country looking bad — don't strip the AI's Calendly link.
         if (countryHardFail) {
-          const hasQualifiedPlaceMention = CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(transcript) || WESTERN_CITIES_REGEX.test(transcript);
+          const hasQualifiedPlaceMention = CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(scrubUnqualified(transcript)) || WESTERN_CITIES_REGEX.test(transcript);
           const hasWorkContext = WORK_EXPERIENCE_CONTEXT_REGEX.test(transcript);
           if (hasQualifiedPlaceMention && hasWorkContext) {
             console.log(`widget-save-message: Calendly leak guard skipping strip for ${visitorId} (re-qualifying signal in transcript)`);
@@ -487,22 +529,18 @@ Deno.serve(async (req) => {
       // discussed; never inferred from the raw transcript.
       const arabicHardFail = FAMILY_GP_REGEX.test(v.specialty || '') && v.speaks_arabic === false;
 
-      // Age — DB first, then transcript regex. Skip if the number is followed
-      // by a unit (kg/lbs/cm/etc.) to avoid false positives.
+      // Age — DB first, then transcript. extractStatedAge skips numbers that
+      // are durations ("25 years of experience") or carry a unit (kg/lbs/cm).
       const dbAge = v.age ? parseInt(String(v.age).trim(), 10) : NaN;
       let ageNum = isNaN(dbAge) ? NaN : dbAge;
-      if (isNaN(ageNum)) {
-        const ageMatch = transcript.match(/\b(\d{1,3})\s*(?:years?\s*old|yrs?\s*old|y\.?\s*o\.?|y\/o)\b/i)
-          || transcript.match(/\b(?:i'?m|im|age|aged)\s+(\d{1,3})\b(?!\s*(?:kg|kgs|kilograms?|lbs|pounds?|cm|inches|in|feet|ft|hours?|mins?|minutes?|seconds?|days?|weeks?|months?))/i);
-        if (ageMatch) ageNum = parseInt(ageMatch[1], 10);
-      }
+      if (isNaN(ageNum)) ageNum = extractStatedAge(transcript);
       const ageHardFail = !isNaN(ageNum) && (ageNum < 30 || ageNum > 60);
 
       // Country — only trust the DB here. Scanning the transcript for country
       // names is too risky (e.g. "I'm from Pakistan but trained in UK" would
       // false-trigger). DB country is set by the extractor on country_of_training.
       const dbCountry = (v.country_of_training || '').toLowerCase();
-      let countryHardFail = !!dbCountry && !CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(dbCountry);
+      let countryHardFail = !!dbCountry && !isQualifiedCountry(dbCountry);
 
       // Re-qualifying signal: if the country looks unqualified BUT the
       // transcript mentions Western work experience (a qualified country/city
@@ -511,7 +549,7 @@ Deno.serve(async (req) => {
       // nuance instead of hard-stopping. Catches the "British Egyptian working
       // in Cambridge for 5 years" case.
       if (countryHardFail) {
-        const hasQualifiedPlaceMention = CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(transcript) || WESTERN_CITIES_REGEX.test(transcript);
+        const hasQualifiedPlaceMention = CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(scrubUnqualified(transcript)) || WESTERN_CITIES_REGEX.test(transcript);
         const hasWorkContext = WORK_EXPERIENCE_CONTEXT_REGEX.test(transcript);
         const hasReQualifyingSignal = hasQualifiedPlaceMention && hasWorkContext;
         if (hasReQualifyingSignal) {
@@ -581,26 +619,30 @@ Deno.serve(async (req) => {
         /(rather not|don'?t want|do not want|not comfortable|prefer not|don'?t (wanna|want to)|won'?t share|not (sharing|share|giving))/i.test(reply) ||
         /(later|another time|not now|not yet|maybe later)/i.test(reply);
       if (looksLikeDecline) {
-        // Per Mitch: only offer Calendly when ALL three are true:
+        // Per Mitch: only offer Calendly when ALL of these are true:
         //   (1) country_of_training is in a qualified region
         //   (2) phone hasn't been shared yet (Calendly is a phone-fallback)
         //   (3) age is unknown OR within 30-60
+        //   (4) the role isn't an excluded non-doctor one
         // We compute this inline rather than relying on visitors.qualified,
-        // because qualified only flips once BOTH country and age are extracted —
-        // so a non-qualified doctor who never shares age would slip through.
+        // because qualified only flips once country has been extracted — so a
+        // non-qualified doctor could otherwise slip through. (4) matters
+        // because this path inserts the booking link directly and therefore
+        // never passes through the Calendly leak guard above.
         const { data: visitorRow } = await supabase
           .from("visitors")
-          .select("country_of_training, age, phone")
+          .select("country_of_training, age, phone, specialty")
           .eq("id", visitorId)
           .maybeSingle();
-        const v = (visitorRow as { country_of_training?: string | null; age?: string | null; phone?: string | null } | null) || {};
-        const countryOk = !!v.country_of_training && CALENDLY_QUALIFIED_COUNTRIES_REGEX.test(v.country_of_training);
+        const v = (visitorRow as { country_of_training?: string | null; age?: string | null; phone?: string | null; specialty?: string | null } | null) || {};
+        const countryOk = isQualifiedCountry(v.country_of_training || '');
         const phoneNotGiven = !v.phone || /^(n\/a|na|none|unknown|not provided|not available)$/i.test(String(v.phone).trim());
         const ageNum = v.age ? parseInt(String(v.age).trim(), 10) : NaN;
         const ageOk = !v.age || isNaN(ageNum) || (ageNum >= 30 && ageNum <= 60);
-        const shouldOffer = countryOk && phoneNotGiven && ageOk;
+        const specialtyOk = !EXCLUDED_PROFESSIONS_REGEX.test(v.specialty || '');
+        const shouldOffer = countryOk && phoneNotGiven && ageOk && specialtyOk;
         if (!shouldOffer) {
-          console.log(`widget-save-message: skipping Calendly fallback for ${visitorId} (country=${countryOk}, phoneNotGiven=${phoneNotGiven}, ageOk=${ageOk})`);
+          console.log(`widget-save-message: skipping Calendly fallback for ${visitorId} (country=${countryOk}, phoneNotGiven=${phoneNotGiven}, ageOk=${ageOk}, specialtyOk=${specialtyOk})`);
           updatePayload.phone_followup_sent = true;
           updatePayload.phone_asked_at = null;
         } else {

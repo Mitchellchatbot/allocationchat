@@ -15,7 +15,8 @@ const QUALIFIED_COUNTRIES = [
   // North America
   'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   'belize', 'costa rica', 'el salvador', 'guatemala', 'honduras', 'nicaragua', 'panama',
-  'japan', 'south korea', 'republic of korea', 'singapore', 'turkey', 'türkiye', 'turkiye', 'cuba',
+  'japan', 'japanese', 'south korea', 'republic of korea', 'korea', 'korean',
+  'singapore', 'turkey', 'türkiye', 'turkiye', 'cuba',
   'méxico', 'perú', 'panamá',
   'uae', 'united arab emirates', 'emirates', 'dubai', 'abu dhabi',
   // UK + constituents
@@ -39,12 +40,22 @@ const QUALIFIED_COUNTRIES_REGEX = new RegExp(
   'i',
 );
 
+// Bare "Korea"/"Korean" count as South Korea (doctors rarely write the full
+// name), but those words also sit inside "North Korea", which is NOT qualified.
+// This exclusion is checked first and wins. Mirrored in widget-save-message and
+// zoho-export-leads; keep in sync.
+const UNQUALIFIED_OVERRIDE_REGEX = /\bnorth\s*korean?\b/i;
+
+const isQualifiedCountry = (country: string): boolean =>
+  !!country && !UNQUALIFIED_OVERRIDE_REGEX.test(country) && QUALIFIED_COUNTRIES_REGEX.test(country);
+
 // We place medical DOCTORS only. These non-doctor / allied-health roles are
 // disqualifying regardless of country or age. Matched against the extracted
 // `specialty` field (set by the Haiku extractor to the person's actual role),
 // NOT the raw transcript — so "doctor who works with nurses" won't false-fire.
-// Carefully excludes doctor titles that merely sound similar (radiologist,
-// physician, psychiatrist). Mirrored in widget-save-message; keep in sync.
+// Carefully excludes titles that merely sound similar (radiologist, physician).
+// NOTE: psychiatrists AND clinical psychologists are both accepted — do not add
+// "psychologist" here. Mirrored in widget-save-message; keep in sync.
 const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
 
 // Family Medicine / General Practice doctors are only placed if they speak
@@ -92,7 +103,7 @@ function isQualified(visitor: Record<string, unknown>): boolean {
   if (FAMILY_GP_REGEX.test(specialty) && visitor.speaks_arabic !== true) return false;
 
   const country = String(visitor.country_of_training || '');
-  if (!QUALIFIED_COUNTRIES_REGEX.test(country)) return false;
+  if (!isQualifiedCountry(country)) return false;
 
   // Age is no longer required, but if it was provided and falls outside 30-60, treat as unqualified.
   const ageRaw = String(visitor.age ?? '').trim();
@@ -175,6 +186,8 @@ Deno.serve(async (req) => {
         max_tokens: 512,
         system: `You are an information extraction assistant. Analyze the conversation and extract any personal information the doctor has shared naturally. Only extract information that was explicitly stated by the user (doctor messages), not inferred. If information is not clearly stated, do NOT include it — leave the field out entirely. Never return placeholder values like "N/A", "none", "unknown", or empty strings.
 
+For age: only fill this in when the person explicitly states how old they are ("I'm 42", "I am 42 years old", "age 42"). Years of experience, years in practice, years since qualifying, and graduation years are NOT ages — "a psychiatrist with 25 years of experience" means the age is UNKNOWN, so omit the field. A wrong age wrongly disqualifies senior doctors, so when in doubt, leave it out.
+
 For booking_call_required: set this to true ONLY if the AI asked the doctor for their phone/mobile number AND the doctor either (a) explicitly declined (e.g. "no", "I'd rather not", "I don't want to share that") or (b) deflected the question and never came back to it. Do NOT set it true if the doctor did share a phone number, or if the phone question hasn't been asked yet. Leave the field unset (omit it) when the answer is unclear.
 
 For speaks_arabic: set to true if the doctor indicated they speak Arabic, or false if they indicated they do NOT speak Arabic. Only set it when language was explicitly discussed — leave the field unset (omit it) otherwise.`,
@@ -194,8 +207,8 @@ For speaks_arabic: set to true if the doctor indicated they speak Arabic, or fal
                 name: { type: 'string', description: "The doctor's full name if they mentioned it" },
                 email: { type: 'string', description: "The doctor's email address if they shared it" },
                 phone: { type: 'string', description: "The doctor's phone number if they shared it" },
-                age: { type: 'string', description: "The doctor's age if mentioned" },
-                specialty: { type: 'string', description: "The doctor's medical specialty (e.g. Cardiology, Radiology, General Practice, Surgery)" },
+                age: { type: 'string', description: "The doctor's age in years, ONLY if they explicitly said how old they are. NEVER derive it from years of experience, years in practice, or a graduation year — '25 years of experience' is NOT an age of 25. Omit the field when the age was not explicitly stated." },
+                specialty: { type: 'string', description: "The doctor's specialty (e.g. Cardiology, Radiology, General Practice, Surgery, Psychiatry, Clinical Psychologist)" },
                 country_of_training: { type: 'string', description: "The country where the doctor completed their medical training" },
                 qualification_date: { type: 'string', description: "The date or year the doctor obtained their specialty qualification (e.g. '2015', 'June 2018')" },
                 booking_call_required: { type: 'boolean', description: "True if the doctor declined to share their phone number, or was asked for it and didn't reply with one. Leave unset otherwise." },
@@ -312,7 +325,7 @@ For speaks_arabic: set to true if the doctor indicated they speak Arabic, or fal
     const mergedEmail = updates.email || visitor?.email;
     const hasContactInDb = !isPlaceholder(mergedPhone) || !isPlaceholder(mergedEmail);
     const mergedCountry = (updates.country_of_training || visitor?.country_of_training || '').toLowerCase();
-    const countryQualifiedNow = !!mergedCountry && QUALIFIED_COUNTRIES_REGEX.test(mergedCountry);
+    const countryQualifiedNow = isQualifiedCountry(mergedCountry);
     const safetyNetReady = hasContactInDb && countryQualifiedNow;
 
     if (phoneCaptured || emailCaptured || safetyNetReady) {

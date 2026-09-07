@@ -11,7 +11,8 @@ const QUALIFIED_COUNTRIES = [
   'europe', 'south america',
   'united states', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'canada', 'mexico',
   'belize', 'costa rica', 'el salvador', 'guatemala', 'honduras', 'nicaragua', 'panama',
-  'japan', 'south korea', 'republic of korea', 'singapore', 'turkey', 'türkiye', 'turkiye', 'cuba',
+  'japan', 'japanese', 'south korea', 'republic of korea', 'korea', 'korean',
+  'singapore', 'turkey', 'türkiye', 'turkiye', 'cuba',
   'méxico', 'perú', 'panamá',
   'uae', 'united arab emirates', 'emirates', 'dubai', 'abu dhabi',
   'united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland',
@@ -31,9 +32,18 @@ const QUALIFIED_COUNTRIES_REGEX = new RegExp(
   'i',
 );
 
-// We place medical DOCTORS only — non-doctor / allied-health roles are skipped
-// at export time regardless of country/age. Keep in sync with the identical
-// regex in extract-visitor-info and widget-save-message.
+// Bare "Korea"/"Korean" count as South Korea, but those words also sit inside
+// "North Korea", which is NOT qualified — this exclusion is checked first and
+// wins. Mirrored in extract-visitor-info and widget-save-message.
+const UNQUALIFIED_OVERRIDE_REGEX = /\bnorth\s*korean?\b/i;
+
+const isQualifiedCountry = (country: string): boolean =>
+  !!country && !UNQUALIFIED_OVERRIDE_REGEX.test(country) && QUALIFIED_COUNTRIES_REGEX.test(country);
+
+// We place medical DOCTORS (and clinical psychologists) only — other non-doctor
+// / allied-health roles are skipped at export time regardless of country/age.
+// NOTE: do not add "psychologist" here, they are accepted. Keep in sync with
+// the identical regex in extract-visitor-info and widget-save-message.
 const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
 
 // Family Medicine / GP doctors are only placed if they speak Arabic — applies
@@ -55,7 +65,7 @@ function isQualified(visitor: Record<string, unknown>): boolean {
   if (FAMILY_GP_REGEX.test(specialty) && visitor.speaks_arabic !== true) return false;
 
   const country = String(visitor.country_of_training || '');
-  if (!QUALIFIED_COUNTRIES_REGEX.test(country)) return false;
+  if (!isQualifiedCountry(country)) return false;
   // Age no longer required; only fail if explicitly provided and outside 30-60
   const ageRaw = String(visitor.age ?? '').trim();
   if (ageRaw) {
