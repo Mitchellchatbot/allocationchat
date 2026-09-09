@@ -81,10 +81,31 @@ const EXTRACT_STRING_FIELDS: (keyof ExtractedInfo)[] = [
   'name', 'email', 'phone', 'age', 'specialty', 'country_of_training', 'qualification_date',
 ];
 
+// Placeholder junk the model sometimes emits instead of omitting a field.
+// The brackets matter: Haiku once wrote the literal "<UNKNOWN>" into
+// country_of_training, which slipped past a bare "unknown" check, persisted as
+// if it were a real country, failed the qualified-country regex, and — because
+// merges only overwrite placeholders — could never be corrected afterwards.
+// That silently cost us a qualified psychiatrist, so strip wrapping brackets
+// and match generously.
+const PLACEHOLDER_VALUES = new Set([
+  '', '-', '--', 'n/a', 'n\\a', 'na', 'none', 'null', 'undefined', 'nil',
+  'unknown', 'not provided', 'not available', 'not specified', 'not stated',
+  'not given', 'not mentioned', 'unspecified', 'tbd', 'to be determined',
+  'no answer', 'unclear', 'placeholder',
+]);
+
 const isPlaceholder = (val?: string | null): boolean => {
   if (!val) return true;
-  const normalized = val.trim().toLowerCase();
-  return ['n/a', 'na', 'none', 'unknown', 'not provided', 'not available', ''].includes(normalized);
+  // Strip wrapping <>, [], {}, () and quotes so "<UNKNOWN>" / "[not provided]"
+  // normalize to the bare token before comparison.
+  const normalized = val
+    .trim()
+    .toLowerCase()
+    .replace(/^[<\[{("']+/, '')
+    .replace(/[>\]})"']+$/, '')
+    .trim();
+  return PLACEHOLDER_VALUES.has(normalized);
 };
 
 const cleanValue = (val?: string): string | undefined => {
@@ -184,9 +205,11 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 512,
-        system: `You are an information extraction assistant. Analyze the conversation and extract any personal information the doctor has shared naturally. Only extract information that was explicitly stated by the user (doctor messages), not inferred. If information is not clearly stated, do NOT include it — leave the field out entirely. Never return placeholder values like "N/A", "none", "unknown", or empty strings.
+        system: `You are an information extraction assistant. Analyze the conversation and extract any personal information the doctor has shared naturally. Only extract information that was explicitly stated by the user (doctor messages), not inferred. If information is not clearly stated, do NOT include it — leave the field out entirely. Never return placeholder values like "N/A", "none", "unknown", "not provided", "<UNKNOWN>", "[unknown]", or empty strings. A placeholder is WORSE than a missing field: it gets stored as if it were real data and permanently blocks the correct value from ever being saved. If you do not know a value, omit the key.
 
 For age: only fill this in when the person explicitly states how old they are ("I'm 42", "I am 42 years old", "age 42"). Years of experience, years in practice, years since qualifying, and graduation years are NOT ages — "a psychiatrist with 25 years of experience" means the age is UNKNOWN, so omit the field. A wrong age wrongly disqualifies senior doctors, so when in doubt, leave it out.
+
+For country_of_training: an explicit statement about where they trained, studied, qualified, or got their degree ALWAYS wins ("I trained in India", "I did my residency in the UK"). If — and only if — they never said where they trained, fall back to where they say they live or work: "I am living and working in the Netherlands", "I'm based in Dubai", "I practise in Germany" should all be recorded as that country, since for most doctors these line up. Only take the explicit training country when both are given and they differ: "I trained in India, currently working in the Netherlands" is India, NOT the Netherlands. Never guess from a name, language, or nationality alone, and never output a placeholder — omit the field if neither a training country nor a place of living/working was mentioned.
 
 For booking_call_required: set this to true ONLY if the AI asked the doctor for their phone/mobile number AND the doctor either (a) explicitly declined (e.g. "no", "I'd rather not", "I don't want to share that") or (b) deflected the question and never came back to it. Do NOT set it true if the doctor did share a phone number, or if the phone question hasn't been asked yet. Leave the field unset (omit it) when the answer is unclear.
 
@@ -209,7 +232,7 @@ For speaks_arabic: set to true if the doctor indicated they speak Arabic, or fal
                 phone: { type: 'string', description: "The doctor's phone number if they shared it" },
                 age: { type: 'string', description: "The doctor's age in years, ONLY if they explicitly said how old they are. NEVER derive it from years of experience, years in practice, or a graduation year — '25 years of experience' is NOT an age of 25. Omit the field when the age was not explicitly stated." },
                 specialty: { type: 'string', description: "The doctor's specialty (e.g. Cardiology, Radiology, General Practice, Surgery, Psychiatry, Clinical Psychologist)" },
-                country_of_training: { type: 'string', description: "The country where the doctor completed their medical training" },
+                country_of_training: { type: 'string', description: "The country where the doctor trained. An explicit training/study/qualification country wins. If they never said where they trained, use the country they say they live or work in instead ('living and working in the Netherlands' -> 'Netherlands'). If both are given and differ, use the training country. Must be a real country name — NEVER a placeholder like 'unknown' or '<UNKNOWN>'. Omit the field if neither was mentioned." },
                 qualification_date: { type: 'string', description: "The date or year the doctor obtained their specialty qualification (e.g. '2015', 'June 2018')" },
                 booking_call_required: { type: 'boolean', description: "True if the doctor declined to share their phone number, or was asked for it and didn't reply with one. Leave unset otherwise." },
                 speaks_arabic: { type: 'boolean', description: "True if the doctor said they speak Arabic, false if they said they do not. Leave unset if language was not discussed." },
