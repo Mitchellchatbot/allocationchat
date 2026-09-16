@@ -216,6 +216,100 @@ Be uplifting. Be warm. Bring quiet confidence. Sometimes that means being brief.
 
 type PersonalityPreset = 'emily' | 'sarah' | 'michael' | 'daniel' | 'custom' | null;
 
+const parseCalendlyUrls = (value: string | null | undefined): string[] => {
+  const urls = (value || '').split(/\s*[\n,]\s*/).map((s) => s.trim()).filter(Boolean);
+  return urls.length > 0 ? urls : [''];
+};
+
+const repNameFromUrl = (url: string): string | null => {
+  try {
+    const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+    if (!u.hostname.endsWith('calendly.com')) return null;
+    const slug = u.pathname.split('/').filter(Boolean)[0] || '';
+    const first = slug.split('-')[0] || '';
+    return first ? first.charAt(0).toUpperCase() + first.slice(1) : null;
+  } catch {
+    return null;
+  }
+};
+
+// The rows need their own state: settings.calendly_url is a newline-joined
+// string of NON-EMPTY urls, so a blank "waiting to be typed into" row simply
+// cannot be represented in it. Deriving the rows straight from that string
+// meant "Add another link" appended "" and the very next filter(Boolean) threw
+// it away, so the button did nothing at all. Keep the draft rows here and only
+// publish the non-empty ones upward.
+const CalendlyLinksEditor = ({
+  value,
+  onChange,
+}: {
+  value: string | null | undefined;
+  onChange: (next: string | null) => void;
+}) => {
+  const [rows, setRows] = useState<string[]>(() => parseCalendlyUrls(value));
+
+  // Re-sync only when the incoming value genuinely differs from what we're
+  // already showing, so adding a blank row doesn't immediately clobber itself.
+  useEffect(() => {
+    const incoming = parseCalendlyUrls(value).filter(Boolean).join('\n');
+    const current = rows.map((s) => s.trim()).filter(Boolean).join('\n');
+    if (incoming !== current) setRows(parseCalendlyUrls(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const commit = (next: string[]) => {
+    setRows(next);
+    const cleaned = next.map((s) => s.trim()).filter(Boolean);
+    onChange(cleaned.length === 0 ? null : cleaned.join('\n'));
+  };
+
+  return (
+    <div className="space-y-2">
+      {rows.map((url, i) => {
+        const repName = repNameFromUrl(url);
+        return (
+          <div key={i} className="flex items-start gap-2">
+            <div className="flex-1">
+              <Input
+                placeholder="https://calendly.com/your-team/consultation"
+                value={url}
+                onChange={(e) => {
+                  const next = [...rows];
+                  next[i] = e.target.value;
+                  commit(next);
+                }}
+              />
+              {repName && <p className="text-xs text-muted-foreground mt-1 pl-1">Rep: {repName}</p>}
+            </div>
+            {rows.length > 1 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                type="button"
+                onClick={() => commit(rows.filter((_, idx) => idx !== i))}
+                className="text-muted-foreground hover:text-destructive shrink-0"
+                title="Remove this link"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        );
+      })}
+      <Button
+        variant="outline"
+        size="sm"
+        type="button"
+        onClick={() => setRows([...rows, ''])}
+        className="gap-1.5"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add another link
+      </Button>
+    </div>
+  );
+};
+
 const AISupport = () => {
   const { user } = useAuth();
   const { properties } = useConversations();
@@ -1807,72 +1901,10 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
                       <p className="text-sm text-muted-foreground">
                         After collecting contact info, the AI will offer visitors a link to book a call via Calendly. Add a link per team member to rotate leads — the system serves the next rep after the one who got the previous lead.
                       </p>
-                      {(() => {
-                        const urls = (settings.calendly_url || '').split(/\s*[\n,]\s*/).map(s => s.trim()).filter(Boolean);
-                        const list = urls.length > 0 ? urls : [''];
-                        const update = (newList: string[]) => {
-                          const cleaned = newList.map(s => s.trim()).filter(Boolean);
-                          setSettings({ ...settings, calendly_url: cleaned.length === 0 ? null : cleaned.join('\n') });
-                        };
-                        const updateAt = (i: number, value: string) => {
-                          const next = [...list];
-                          next[i] = value;
-                          update(next);
-                        };
-                        const remove = (i: number) => update(list.filter((_, idx) => idx !== i));
-                        const repNameFromUrl = (url: string): string | null => {
-                          try {
-                            const u = new URL(url.startsWith('http') ? url : `https://${url}`);
-                            if (!u.hostname.endsWith('calendly.com')) return null;
-                            const slug = u.pathname.split('/').filter(Boolean)[0] || '';
-                            const first = slug.split('-')[0] || '';
-                            return first ? first.charAt(0).toUpperCase() + first.slice(1) : null;
-                          } catch { return null; }
-                        };
-                        return (
-                          <div className="space-y-2">
-                            {list.map((url, i) => {
-                              const repName = repNameFromUrl(url);
-                              return (
-                                <div key={i} className="flex items-start gap-2">
-                                  <div className="flex-1">
-                                    <Input
-                                      placeholder="https://calendly.com/your-team/consultation"
-                                      value={url}
-                                      onChange={(e) => updateAt(i, e.target.value)}
-                                    />
-                                    {repName && (
-                                      <p className="text-xs text-muted-foreground mt-1 pl-1">Rep: {repName}</p>
-                                    )}
-                                  </div>
-                                  {list.length > 1 && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      type="button"
-                                      onClick={() => remove(i)}
-                                      className="text-muted-foreground hover:text-destructive shrink-0"
-                                      title="Remove this link"
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              type="button"
-                              onClick={() => update([...list, ''])}
-                              className="gap-1.5"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                              Add another link
-                            </Button>
-                          </div>
-                        );
-                      })()}
+                      <CalendlyLinksEditor
+                        value={settings.calendly_url}
+                        onChange={(next) => setSettings({ ...settings, calendly_url: next })}
+                      />
                       {settings.calendly_url && (
                         <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
                           {(() => {
