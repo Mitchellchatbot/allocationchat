@@ -67,7 +67,7 @@ function renderMessageContent(content: string) {
     const isCalendly = /calendly\.com/i.test(part);
     if (isCalendly) {
       // Extract the rep's first name from the URL slug (e.g.
-      // calendly.com/asser-allocationassist/30min → "Asser") so the booking
+      // calendly.com/sumia-allocationassist/30min → "Sumia") so the booking
       // button tells the doctor exactly who they're getting connected to.
       let repName: string | null = null;
       try {
