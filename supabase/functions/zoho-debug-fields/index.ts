@@ -73,8 +73,11 @@ Deno.serve(async (req) => {
     data_type: f.data_type,
     // Zoho freezes actual_value when someone renames a picklist option in the
     // UI, so display_value ("Not Contacted") and actual_value ("Not Qualified")
-    // can diverge. API writes must use actual_value. Return both — reporting
-    // only actual_value made it look like the status didn't exist at all.
+    // can diverge. Return both, and note which one to write: WRITES MATCH
+    // display_value, the option's current name. Sending actual_value for a
+    // renamed option stores that literal string instead of selecting the
+    // option. Reporting only actual_value here previously made a valid status
+    // look nonexistent and sent a fix in exactly the wrong direction.
     pick_list_values: (f.pick_list_values as Array<{ display_value: string; actual_value: string }> | undefined)
       ?.map(v => ({ display: v.display_value, api: v.actual_value })),
   }));

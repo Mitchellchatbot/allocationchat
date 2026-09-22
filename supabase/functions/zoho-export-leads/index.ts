@@ -345,16 +345,21 @@ async function createZohoLead(
     visitor.age ? `Age: ${visitor.age}` : null,
   ].filter(Boolean).join(" | ");
 
-  // Lead_Status is always the first column in Zoho's pipeline, which that org
-  // DISPLAYS as "Not Contacted" — but the API actual_value is "Not Qualified".
-  // Zoho freezes actual_value when a picklist option is renamed in the UI, and
-  // writing the display string is silently dropped, so every lead exported
-  // before this was landing with no status at all. Confirm with:
+  // Lead_Status is always "Not Contacted" — the first column in Zoho's pipeline.
+  //
+  // Do NOT "correct" this to the actual_value that
   //   GET /functions/v1/zoho-debug-fields?filter=status
+  // reports for this option ("Not Qualified"). That option was renamed in the
+  // Zoho UI and Zoho froze the old name as actual_value, but writes are matched
+  // against the CURRENT name. Sending "Not Qualified" does not select the
+  // option — it stores that literal string, and the lead then reads back as
+  // "Not Qualified", i.e. the opposite of what was intended. Verified by
+  // writing it and reading it back; it cost a batch of 8 leads.
+  //
   // The "Booking a Call Required" signal (when the doctor declined to share a
   // phone number) is surfaced in the Description field instead, since Zoho's
   // existing picklist doesn't include that status as an option.
-  const LEAD_STATUS_NOT_CONTACTED = "Not Qualified";
+  const LEAD_STATUS_NOT_CONTACTED = "Not Contacted";
   const specialtyPicklist = await mapSpecialtyToPicklist(visitor.specialty);
 
   const leadPayload = {

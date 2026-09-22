@@ -68,7 +68,11 @@ Deno.serve(async (req) => {
       // settings.fields.READ lets us read picklist values + field metadata so
       // we can keep our payload field names + picklist values in sync with the
       // user's Zoho without hand-editing every time they tweak a field.
-      scope: "ZohoCRM.modules.leads.CREATE,ZohoCRM.modules.leads.READ,ZohoCRM.settings.fields.READ",
+      // leads.UPDATE is needed to correct records we already created — without
+      // it, a bad bulk import can only be repaired by hand in the Zoho UI
+      // (Zoho returns OAUTH_SCOPE_MISMATCH on PUT). Existing connections keep
+      // whatever scope they were granted; they must reconnect to gain UPDATE.
+      scope: "ZohoCRM.modules.leads.CREATE,ZohoCRM.modules.leads.READ,ZohoCRM.modules.leads.UPDATE,ZohoCRM.settings.fields.READ",
       client_id: clientId,
       response_type: "code",
       redirect_uri: redirectUri,

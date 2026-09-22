@@ -98,12 +98,21 @@ async function fetchPicklists(
   if (res.status === 401) return { status: 401 };
   const data = await res.json();
   if (!res.ok || !data.fields) return { status: res.status };
+  // Accept EITHER display_value or actual_value. When a picklist option is
+  // renamed, Zoho keeps the old string as actual_value but matches writes
+  // against the current display_value — writing the actual_value of a renamed
+  // option stores that literal string instead of selecting the option. So
+  // validating against actual_value alone rejects the string that actually
+  // works. Callers should send the display value.
   const picklists: Record<string, Set<string>> = {};
   for (const f of data.fields) {
     if (f.data_type === "picklist" && Array.isArray(f.pick_list_values)) {
-      picklists[f.api_name] = new Set(
-        f.pick_list_values.map((v: { actual_value: string }) => v.actual_value),
-      );
+      const values = new Set<string>();
+      for (const v of f.pick_list_values as Array<{ display_value: string; actual_value: string }>) {
+        if (v.display_value) values.add(v.display_value);
+        if (v.actual_value) values.add(v.actual_value);
+      }
+      picklists[f.api_name] = values;
     }
   }
   return { status: res.status, picklists };
@@ -126,9 +135,14 @@ Deno.serve(async (req) => {
       leads = [],
       dryRun = true,
       fireWorkflows = false,
+      // "create" inserts new records. "read" fetches existing ones by id so a
+      // write can be confirmed against what Zoho actually stored, rather than
+      // trusting the field metadata. "update" PUTs changes to existing ids.
+      mode = "create",
+      ids = [],
     } = body;
 
-    if (!Array.isArray(leads) || leads.length === 0) {
+    if (mode === "create" && (!Array.isArray(leads) || leads.length === 0)) {
       return new Response(JSON.stringify({ error: "No leads supplied" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -163,6 +177,74 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: `Could not read Zoho field metadata (HTTP ${meta.status})` }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Read-back mode: fetch records by id so a write can be verified against
+    // what Zoho actually stored.
+    if (mode === "read") {
+      const rows: Array<Record<string, unknown>> = [];
+      for (const id of ids) {
+        const r = await fetch(
+          `${connection.api_domain}/crm/v2/Leads/${id}?fields=Last_Name,First_Name,Email,Lead_Status,Lead_Source,Specialty_New`,
+          { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } },
+        );
+        const d = await r.json();
+        const rec = d?.data?.[0];
+        rows.push(rec
+          ? {
+            id,
+            name: [rec.First_Name, rec.Last_Name].filter(Boolean).join(" "),
+            email: rec.Email,
+            Lead_Status: rec.Lead_Status,
+            Lead_Source: rec.Lead_Source,
+            Specialty_New: rec.Specialty_New,
+          }
+          : { id, error: `HTTP ${r.status}`, raw: d });
+      }
+      return new Response(JSON.stringify({ mode: "read", rows }, null, 2), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Update mode: `leads` carries an `id` per row plus the fields to change.
+    if (mode === "update") {
+      const badStatus = leads.filter((l: Record<string, unknown>) =>
+        l.Lead_Status && !meta.picklists!.Lead_Status?.has(String(l.Lead_Status)));
+      if (badStatus.length) {
+        return new Response(JSON.stringify({
+          error: "Invalid Lead_Status — nothing was sent",
+          values: [...new Set(badStatus.map((l: Record<string, unknown>) => l.Lead_Status))],
+        }, null, 2), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (dryRun) {
+        return new Response(JSON.stringify({ mode: "update", dryRun: true, count: leads.length, sample: leads.slice(0, 3) }, null, 2), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const payload: Record<string, unknown> = { data: leads };
+      if (!fireWorkflows) payload.trigger = [];
+      const r = await fetch(`${connection.api_domain}/crm/v2/Leads`, {
+        method: "PUT",
+        headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      const rows = (d?.data || []).map((row: Record<string, unknown>, i: number) => ({
+        id: (leads[i] as Record<string, unknown>).id,
+        code: row.code,
+        message: row.message,
+      }));
+      return new Response(JSON.stringify({
+        mode: "update",
+        httpStatus: r.status,
+        updated: rows.filter((x: Record<string, unknown>) => x.code === "SUCCESS").length,
+        failed: rows.filter((x: Record<string, unknown>) => x.code !== "SUCCESS").length,
+        rows,
+        // Zoho signals some failures at the top level rather than per-record,
+        // so never discard the raw body — an empty `rows` with no error is
+        // indistinguishable from success otherwise.
+        raw: rows.length === 0 ? d : undefined,
+      }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Validate every picklist value up front and refuse the whole batch if any
