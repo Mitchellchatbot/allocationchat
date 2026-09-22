@@ -57,8 +57,9 @@ const scrubUnqualified = (text: string): string => text.replace(/\bnorth\s*korea
 // works with nurses" must not false-trigger. Excludes titles that merely sound
 // similar (radiologist, physician). NOTE: psychiatrists AND clinical
 // psychologists are both accepted — do not add "psychologist" here.
-// Mirrors EXCLUDED_PROFESSIONS_REGEX in extract-visitor-info.
-const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
+// Mirrors EXCLUDED_PROFESSIONS_REGEX in extract-visitor-info — see the note
+// there on why the trailing `s?` and the `(?:st|cs)` groups are load-bearing.
+const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodonti(?:st|cs)|periodonti(?:st|cs)|endodonti(?:st|cs)|prosthodonti(?:st|cs)|nurse|nursing|midwi(?:fe|ves)|midwifery|radiographer|sonographer|pharmac(?:ist|y)|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|dietetics|nutritionist|optometr(?:ist|y)|optician|orthopti(?:st|cs)|podiatr(?:ist|y)|chiropod(?:ist|y)|paramedic|phlebotomist|technician|technologist)s?\b/i;
 
 // Family Medicine / GP doctors are only placed if they speak Arabic — applies
 // to no other specialty. Matched against the extracted `specialty` DB field.

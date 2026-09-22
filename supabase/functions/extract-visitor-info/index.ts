@@ -56,7 +56,11 @@ const isQualifiedCountry = (country: string): boolean =>
 // Carefully excludes titles that merely sound similar (radiologist, physician).
 // NOTE: psychiatrists AND clinical psychologists are both accepted — do not add
 // "psychologist" here. Mirrored in widget-save-message; keep in sync.
-const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
+// The trailing `s?` matters: without it `\bnurse\b` does not match "Nurses",
+// and a Brazil-trained RN/midwife was classified as a qualified doctor. The
+// `(?:st|cs)` groups catch the field name as well as the practitioner
+// ("Prosthodontics" as well as "prosthodontist"), which chat forms often use.
+const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodonti(?:st|cs)|periodonti(?:st|cs)|endodonti(?:st|cs)|prosthodonti(?:st|cs)|nurse|nursing|midwi(?:fe|ves)|midwifery|radiographer|sonographer|pharmac(?:ist|y)|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|dietetics|nutritionist|optometr(?:ist|y)|optician|orthopti(?:st|cs)|podiatr(?:ist|y)|chiropod(?:ist|y)|paramedic|phlebotomist|technician|technologist)s?\b/i;
 
 // Family Medicine / General Practice doctors are only placed if they speak
 // Arabic — this gate applies to NO other specialty. Matched against the

@@ -43,8 +43,9 @@ const isQualifiedCountry = (country: string): boolean =>
 // We place medical DOCTORS (and clinical psychologists) only — other non-doctor
 // / allied-health roles are skipped at export time regardless of country/age.
 // NOTE: do not add "psychologist" here, they are accepted. Keep in sync with
-// the identical regex in extract-visitor-info and widget-save-message.
-const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodontist|periodontist|endodontist|prosthodontist|nurse|nursing|midwife|midwifery|radiographer|sonographer|pharmacist|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|nutritionist|optometrist|optician|podiatrist|chiropodist|paramedic|phlebotomist|technician|technologist)\b/i;
+// the identical regex in extract-visitor-info and widget-save-message — see the
+// note there on why the trailing `s?` and the `(?:st|cs)` groups are load-bearing.
+const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygienist|nurse)|orthodonti(?:st|cs)|periodonti(?:st|cs)|endodonti(?:st|cs)|prosthodonti(?:st|cs)|nurse|nursing|midwi(?:fe|ves)|midwifery|radiographer|sonographer|pharmac(?:ist|y)|physiotherap(?:y|ist)|physical\s+therap(?:y|ist)|occupational\s+therap(?:y|ist)|speech\s+(?:(?:and\s+)?language\s+)?therap(?:y|ist)|dietitian|dietician|dietetics|nutritionist|optometr(?:ist|y)|optician|orthopti(?:st|cs)|podiatr(?:ist|y)|chiropod(?:ist|y)|paramedic|phlebotomist|technician|technologist)s?\b/i;
 
 // Family Medicine / GP doctors are only placed if they speak Arabic — applies
 // to no other specialty. Keep in sync with extract-visitor-info and
@@ -344,10 +345,16 @@ async function createZohoLead(
     visitor.age ? `Age: ${visitor.age}` : null,
   ].filter(Boolean).join(" | ");
 
-  // Lead_Status is always "Not Contacted" — the first column in Zoho's pipeline.
+  // Lead_Status is always the first column in Zoho's pipeline, which that org
+  // DISPLAYS as "Not Contacted" — but the API actual_value is "Not Qualified".
+  // Zoho freezes actual_value when a picklist option is renamed in the UI, and
+  // writing the display string is silently dropped, so every lead exported
+  // before this was landing with no status at all. Confirm with:
+  //   GET /functions/v1/zoho-debug-fields?filter=status
   // The "Booking a Call Required" signal (when the doctor declined to share a
   // phone number) is surfaced in the Description field instead, since Zoho's
   // existing picklist doesn't include that status as an option.
+  const LEAD_STATUS_NOT_CONTACTED = "Not Qualified";
   const specialtyPicklist = await mapSpecialtyToPicklist(visitor.specialty);
 
   const leadPayload = {
@@ -369,7 +376,7 @@ async function createZohoLead(
       Age: visitor.age || undefined,
       Description: description || undefined,
       Lead_Source: "Chatbot",
-      Lead_Status: "Not Contacted",
+      Lead_Status: LEAD_STATUS_NOT_CONTACTED,
     }],
   };
 
