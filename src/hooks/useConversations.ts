@@ -221,7 +221,7 @@ export const useConversations = (options: UseConversationsOptions = {}) => {
 
     if (convError) {
       console.error('Error fetching conversations:', convError);
-      return [];
+      throw convError;
     }
 
     if (!convData || convData.length === 0) return [];
@@ -233,12 +233,20 @@ export const useConversations = (options: UseConversationsOptions = {}) => {
     // conversations × a handful of messages each is enough to truncate every
     // conversation at roughly seq 3. Bump to a number large enough that 300+
     // conversations with full intake transcripts (~20 messages each) fit.
-    const { data: messagesData } = await supabase
+    const { data: messagesData, error: messagesError } = await supabase
       .from('messages')
       .select('*')
       .in('conversation_id', convIds)
       .order('sequence_number', { ascending: true })
       .limit(20000);
+
+    // A failure here must not be swallowed: with no messages, the visitor-message
+    // filter below discards every conversation, which React Query would then cache
+    // as a successful empty inbox and never retry.
+    if (messagesError) {
+      console.error('Error fetching messages:', messagesError);
+      throw messagesError;
+    }
 
     const messagesByConvId = new Map<string, DbMessage[]>();
     for (const m of (messagesData || []) as any[]) {
@@ -269,6 +277,7 @@ export const useConversations = (options: UseConversationsOptions = {}) => {
   const {
     data: conversations = [],
     isLoading: conversationsLoading,
+    error: conversationsError,
     refetch: refetchConversations,
   } = useQuery({
     queryKey: QUERY_KEYS.conversations(user?.id || '', selectedPropertyId, agentId, propertyIds),
@@ -278,6 +287,8 @@ export const useConversations = (options: UseConversationsOptions = {}) => {
     // Realtime handles most live updates; polling is a safety net for missed events
     staleTime: Infinity,
     gcTime: 5 * 60 * 1000,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15000),
   });
 
   const loading = propertiesLoading || conversationsLoading;
@@ -975,6 +986,7 @@ export const useConversations = (options: UseConversationsOptions = {}) => {
     conversations,
     properties,
     loading,
+    conversationsError,
     sendMessage,
     markMessagesAsRead,
     closeConversation,

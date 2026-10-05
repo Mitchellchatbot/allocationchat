@@ -110,6 +110,8 @@ const DashboardContent = () => {
     conversations: dbConversations,
     properties,
     loading: dataLoading,
+    conversationsError,
+    refetch,
     sendMessage,
     markMessagesAsRead,
     closeConversation,
@@ -602,7 +604,7 @@ const DashboardContent = () => {
               )}
 
               {/* List */}
-              <ConversationList conversations={conversationsWithLastMessage} selectedId={selectedConversation?.id} onSelect={handleSelectConversation} showDelete={isClosedView} onDelete={handleDeleteConversation} onBulkClose={handleBulkClose} onBulkDelete={handleBulkDelete} showBulkActions={true} />
+              <ConversationList conversations={conversationsWithLastMessage} selectedId={selectedConversation?.id} onSelect={handleSelectConversation} showDelete={isClosedView} onDelete={handleDeleteConversation} onBulkClose={handleBulkClose} onBulkDelete={handleBulkDelete} showBulkActions={true} loadError={conversationsError} onRetry={refetch} />
             </div>
 
             {/* Chat Panel */}

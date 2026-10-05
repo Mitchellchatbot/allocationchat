@@ -102,6 +102,8 @@ interface ConversationListProps {
   onBulkDelete?: (conversationIds: string[]) => Promise<boolean>;
   showBulkActions?: boolean;
   matchedPreviews?: Map<string, { messageId: string; preview: string }>;
+  loadError?: unknown;
+  onRetry?: () => void;
 }
 
 interface ConversationItemProps {
@@ -319,6 +321,24 @@ const EmptyConversationState = () => {
   );
 };
 
+const ConversationLoadErrorState = ({ onRetry }: { onRetry?: () => void }) => (
+  <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+    <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+      <MessageSquare className="h-8 w-8 text-destructive" />
+    </div>
+    <h3 className="font-medium text-foreground mb-1">Couldn't load conversations</h3>
+    <p className="text-sm text-muted-foreground mb-4">
+      Your conversations are safe — the inbox just failed to load. This usually means the
+      database is under heavy load.
+    </p>
+    {onRetry && (
+      <Button variant="outline" size="sm" onClick={onRetry}>
+        Try again
+      </Button>
+    )}
+  </div>
+);
+
 // Animated conversation list wrapper
 const ConversationListAnimated = ({
   conversations,
@@ -396,6 +416,8 @@ export const ConversationList = ({
   onBulkDelete,
   showBulkActions = false,
   matchedPreviews,
+  loadError,
+  onRetry,
 }: ConversationListProps) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -453,7 +475,7 @@ export const ConversationList = ({
   };
 
   if (conversations.length === 0) {
-    return <EmptyConversationState />;
+    return loadError ? <ConversationLoadErrorState onRetry={onRetry} /> : <EmptyConversationState />;
   }
 
   return (
