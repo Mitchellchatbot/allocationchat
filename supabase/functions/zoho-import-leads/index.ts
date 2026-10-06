@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
       const rows: Array<Record<string, unknown>> = [];
       for (const id of ids) {
         const r = await fetch(
-          `${connection.api_domain}/crm/v2/Leads/${id}?fields=Last_Name,First_Name,Email,Lead_Status,Lead_Source,Specialty_New`,
+          `${connection.api_domain}/crm/v2/Leads/${id}?fields=Last_Name,First_Name,Email,Lead_Status,Lead_Source,Specialty_New,Description,Created_Time,Phone`,
           { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } },
         );
         const d = await r.json();
@@ -195,9 +195,12 @@ Deno.serve(async (req) => {
             id,
             name: [rec.First_Name, rec.Last_Name].filter(Boolean).join(" "),
             email: rec.Email,
+            phone: rec.Phone,
             Lead_Status: rec.Lead_Status,
             Lead_Source: rec.Lead_Source,
             Specialty_New: rec.Specialty_New,
+            Created_Time: rec.Created_Time,
+            Description: rec.Description,
           }
           : { id, error: `HTTP ${r.status}`, raw: d });
       }
