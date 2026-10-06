@@ -104,7 +104,14 @@ export const VisitorLeadsTable = ({ propertyId, allPropertyIds }: VisitorLeadsTa
     const { data, error } = await query;
 
     if (error) {
-      toast.error('Failed to load leads');
+      // Without this the toast is all anyone gets, and a statement timeout looks
+      // identical to a permissions error or a bad column name.
+      console.error('Failed to load leads', error);
+      toast.error(
+        error.code === '57014'
+          ? 'Loading leads timed out. Try narrowing the filters or reload.'
+          : 'Failed to load leads',
+      );
     } else {
       // Drop the embedded `conversations` join column before storing.
       const rows = ((data || []) as any[]).map(({ conversations, ...v }) => v);
