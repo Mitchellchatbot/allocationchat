@@ -378,6 +378,18 @@ Deno.serve(async (req) => {
         .replace(/\s*—\s*/g, ", ")
         .replace(/\s*–\s*/g, ", ");
 
+      // Placeholder leak guard: the playbook uses <CALENDLY_LINK> as a stand-in
+      // for the real URL. If the model echoes the token verbatim, drop the
+      // clause offering the booking rather than showing a doctor raw template.
+      if (/<CALENDLY_LINK>/i.test(cleanedContent)) {
+        console.log(`widget-save-message: stripping <CALENDLY_LINK> placeholder for ${visitorId}`);
+        cleanedContent = cleanedContent
+          .replace(/[^.!?\n]*`?<CALENDLY_LINK>`?[^.!?\n]*[.!?]?/gi, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        if (!cleanedContent) cleanedContent = "What's the best mobile number to reach you on?";
+      }
+
       // Calendly leak guard: if the model pasted the booking link, double-check
       // the visitor's qualification. If they're a hard-no (non-qualified
       // country we know about, or age outside 30-60), strip the URL and the
