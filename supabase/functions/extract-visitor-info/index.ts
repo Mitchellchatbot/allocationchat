@@ -374,9 +374,11 @@ For speaks_arabic: set to true if the doctor indicated they speak Arabic, or fal
           }
 
           // Enqueue Zoho export — zoho-export-leads will skip unqualified leads.
-          // The unique constraint on (visitor_id) makes the second enqueue a noop
-          // when the doctor shares phone after email (or vice versa), or when
-          // the safety-net re-fires on a later turn.
+          // The unique constraint is (visitor_id, trigger_type), so a doctor who
+          // shares phone then email yields two rows, not one; only a re-fire of
+          // the SAME trigger is a noop. The extra row costs an insert, not a
+          // duplicate lead — zoho-export-leads checks zoho_exports (UNIQUE on
+          // visitor_id) before creating, so whichever row runs second skips.
           const trigger = phoneCaptured ? 'phone' : (emailCaptured ? 'email' : 'safety_net');
           const { error: qErr } = await supabase
             .from('zoho_export_queue')

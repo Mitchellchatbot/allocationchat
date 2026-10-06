@@ -501,6 +501,20 @@ Deno.serve(async (req) => {
       .single();
 
     if (!connection) {
+      // Stamp the reason on the queued rows but leave them pending, so they
+      // still drain on their own once Zoho is connected. Without this the
+      // bail-out happens before any per-visitor processing, so retry_count
+      // stays 0 and error_message stays null — the queue retries every cron
+      // tick forever and the dashboard just shows "Not Exported" with no clue.
+      await supabase
+        .from("zoho_export_queue")
+        .update({
+          error_message: "Zoho not connected for this property",
+          updated_at: new Date().toISOString(),
+        })
+        .in("visitor_id", targetVisitorIds)
+        .eq("status", "pending");
+
       return new Response(JSON.stringify({ error: "Zoho not connected for this property" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
