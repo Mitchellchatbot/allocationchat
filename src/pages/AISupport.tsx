@@ -19,6 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { PropertySelector } from '@/components/PropertySelector';
 import { Bot, Loader2, Trash2, RefreshCw, Upload, Pencil, Clock, MessageSquare, Save, FileText, Users, Link, Globe, ChevronDown, Check, Map, MapPin, Sparkles, Plus, X } from 'lucide-react';
@@ -73,7 +74,14 @@ interface AIAgent {
   status: string;
   assigned_properties: string[];
   linked_agent_id?: string;
+  lead_source?: string | null;
 }
+
+// Zoho Lead_Source picklist options this persona can file its leads under. Zoho
+// accepts and then silently discards a value that isn't an existing option, so
+// these are a fixed list rather than free text.
+const LEAD_SOURCE_OPTIONS = ['Chatbot', 'Google Ads'] as const;
+const DEFAULT_LEAD_SOURCE = 'Chatbot';
 
 interface HumanAgent {
   id: string;
@@ -322,6 +330,7 @@ const AISupport = () => {
   const [aiAgentName, setAIAgentName] = useState('');
   const [aiAgentPersonality, setAIAgentPersonality] = useState('');
   const [aiPersonalityPreset, setAiPersonalityPreset] = useState<PersonalityPreset>(null);
+  const [aiLeadSource, setAILeadSource] = useState<string>(DEFAULT_LEAD_SOURCE);
   const [aiSelectedPropertyIds, setAISelectedPropertyIds] = useState<string[]>([]);
   const [isCreatingAI, setIsCreatingAI] = useState(false);
   const [deleteAIAgentId, setDeleteAIAgentId] = useState<string | null>(null);
@@ -451,6 +460,7 @@ const AISupport = () => {
         status: agent.status,
         assigned_properties: assignments.map(a => a.property_id),
         linked_agent_id: agent.linked_agent_id || undefined,
+        lead_source: agent.lead_source,
       };
     });
 
@@ -528,6 +538,7 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
         .insert({
           name: aiAgentName.trim(),
           personality_prompt: getFinalPersonalityPrompt(),
+          lead_source: aiLeadSource,
           owner_id: user.id,
           status: 'active',
         })
@@ -554,6 +565,7 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
       setAIAgentName('');
       setAIAgentPersonality('');
       setAiPersonalityPreset(null);
+      setAILeadSource(DEFAULT_LEAD_SOURCE);
       setAISelectedPropertyIds([]);
       fetchAIAgents();
     } catch (error) {
@@ -575,6 +587,7 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
         .update({
           name: aiAgentName.trim(),
           personality_prompt: getFinalPersonalityPrompt(),
+          lead_source: aiLeadSource,
         })
         .eq('id', editingAIAgent.id);
 
@@ -603,6 +616,7 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
       setAIAgentName('');
       setAIAgentPersonality('');
       setAiPersonalityPreset(null);
+      setAILeadSource(DEFAULT_LEAD_SOURCE);
       setAISelectedPropertyIds([]);
       fetchAIAgents();
     } catch (error) {
@@ -671,6 +685,7 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
       setAIAgentPersonality('');
     }
     
+    setAILeadSource(agent.lead_source || DEFAULT_LEAD_SOURCE);
     setAISelectedPropertyIds(agent.assigned_properties);
     setIsAIDialogOpen(true);
   };
@@ -973,6 +988,7 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
                     setAIAgentName('');
                     setAIAgentPersonality('');
                     setAiPersonalityPreset(null);
+                    setAILeadSource(DEFAULT_LEAD_SOURCE);
                     setAISelectedPropertyIds([]);
                   }
                 }}>
@@ -1039,6 +1055,23 @@ Avoid em dashes, semicolons, and starting too many sentences with "I". Skip jarg
                       )}
                     </div>
                     
+                    <div className="space-y-1">
+                      <Label className="text-xs">CRM Lead Source</Label>
+                      <Select value={aiLeadSource} onValueChange={setAILeadSource}>
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LEAD_SOURCE_OPTIONS.map((source) => (
+                            <SelectItem key={source} value={source} className="text-sm">{source}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">
+                        Leads from chats this persona starts are filed under this source in Zoho. Use Google Ads for personas you embed on paid landing pages.
+                      </p>
+                    </div>
+
                     <div className="space-y-1">
                       <Label className="text-xs">Assign to Properties</Label>
                       <div className="space-y-1.5 max-h-20 overflow-auto border rounded-md p-2">

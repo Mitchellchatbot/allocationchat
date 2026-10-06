@@ -168,6 +168,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           id: string
+          lead_source: string | null
           linked_agent_id: string | null
           name: string
           owner_id: string
@@ -179,6 +180,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id?: string
+          lead_source?: string | null
           linked_agent_id?: string | null
           name: string
           owner_id: string
@@ -190,6 +192,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id?: string
+          lead_source?: string | null
           linked_agent_id?: string | null
           name?: string
           owner_id?: string
@@ -209,6 +212,7 @@ export type Database = {
       }
       conversations: {
         Row: {
+          ai_agent_id: string | null
           ai_enabled: boolean
           ai_queued_at: string | null
           ai_queued_paused: boolean | null
@@ -228,6 +232,7 @@ export type Database = {
           visitor_id: string
         }
         Insert: {
+          ai_agent_id?: string | null
           ai_enabled?: boolean
           ai_queued_at?: string | null
           ai_queued_paused?: boolean | null
@@ -247,6 +252,7 @@ export type Database = {
           visitor_id: string
         }
         Update: {
+          ai_agent_id?: string | null
           ai_enabled?: boolean
           ai_queued_at?: string | null
           ai_queued_paused?: boolean | null
@@ -266,6 +272,13 @@ export type Database = {
           visitor_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "conversations_ai_agent_id_fkey"
+            columns: ["ai_agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "conversations_assigned_agent_id_fkey"
             columns: ["assigned_agent_id"]

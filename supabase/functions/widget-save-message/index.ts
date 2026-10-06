@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { conversationId: incomingConvId, propertyId, visitorId, sessionId, senderType, content, aiQueueAction, aiQueuePreview, aiQueueWindowMs } = await req.json();
+    const { conversationId: incomingConvId, propertyId, visitorId, sessionId, senderType, content, aiAgentId, aiQueueAction, aiQueuePreview, aiQueueWindowMs } = await req.json();
 
     if (!visitorId || !sessionId || !senderType || !content) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -262,10 +262,24 @@ Deno.serve(async (req) => {
           .maybeSingle();
         const propertyAiEnabled = propRow?.ai_enabled !== false;
 
+        // Record which persona is fronting this chat — the Zoho export reads its
+        // lead_source. The widget supplies the id, so confirm it's actually
+        // assigned to this property before trusting it.
+        let servingAgentId: string | null = null;
+        if (aiAgentId) {
+          const { data: assignment } = await supabase
+            .from("ai_agent_properties")
+            .select("ai_agent_id")
+            .eq("ai_agent_id", aiAgentId)
+            .eq("property_id", propertyId)
+            .maybeSingle();
+          servingAgentId = assignment ? aiAgentId : null;
+        }
+
         // Create new conversation
         const { data: newConv, error: convCreateErr } = await supabase
           .from("conversations")
-          .insert({ property_id: propertyId, visitor_id: visitorId, status: "active", ai_enabled: propertyAiEnabled })
+          .insert({ property_id: propertyId, visitor_id: visitorId, status: "active", ai_enabled: propertyAiEnabled, ai_agent_id: servingAgentId })
           .select("id")
           .single();
 

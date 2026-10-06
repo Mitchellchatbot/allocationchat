@@ -1154,6 +1154,9 @@ export const useWidgetChat = ({ propertyId, greeting, isPreview = false }: Widge
             sessionId,
             senderType: 'visitor',
             content,
+            // Only read when creating: stamps the fronting persona on the
+            // conversation so the CRM export can attribute the lead source.
+            aiAgentId: convId ? undefined : currentAiAgent?.id,
           }),
         }).then(async (resp) => {
           if (resp.ok) {

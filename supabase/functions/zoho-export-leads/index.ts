@@ -52,6 +52,13 @@ const EXCLUDED_PROFESSIONS_REGEX = /\b(dentist(?:ry)?|dental\s+(?:surgeon|hygien
 // widget-save-message.
 const FAMILY_GP_REGEX = /(\bfamily\s+(?:medicine|physician|practice|practitioner|doctor)\b|\bgeneral\s+(?:practice|practitioner|physician)\b|\bgp\b|\bprimary\s+care\b)/i;
 
+// Where a lead came from, as a Zoho Lead_Source picklist option. Personas can
+// override this (ai_agents.lead_source) so a chatbot embedded on a Google Ads
+// landing page reports as paid traffic; everything else is the site chatbot.
+// An option that doesn't exist in Zoho's picklist is accepted by the API and
+// then silently discarded, so overrides must match Zoho exactly.
+const DEFAULT_LEAD_SOURCE = "Chatbot";
+
 // Retry backoff delays in minutes: attempt 1→5m, 2→30m, 3→2h, 4→8h, 5→give up
 const RETRY_DELAYS_MINUTES = [5, 30, 120, 480];
 const MAX_RETRIES = RETRY_DELAYS_MINUTES.length;
@@ -313,6 +320,7 @@ async function createZohoLead(
   accessToken: string,
   visitor: Record<string, string | null>,
   defaultOwnerId?: string | null,
+  leadSource: string = DEFAULT_LEAD_SOURCE,
 ): Promise<{ id: string; status: number; duplicate?: boolean; error?: string } | { id: null; status: number; error?: string }> {
   // Strip common title prefixes ("Dr", "Dr.", "Mr.", "Ms.", "Mrs.", "Prof.")
   // so the actual given name lands in First_Name, then split the rest into
@@ -380,7 +388,7 @@ async function createZohoLead(
       Country_of_Specialty_training: visitor.country_of_training || undefined,
       Age: visitor.age || undefined,
       Description: description || undefined,
-      Lead_Source: "Chatbot",
+      Lead_Source: leadSource,
       Lead_Status: LEAD_STATUS_NOT_CONTACTED,
     }],
   };
@@ -567,7 +575,26 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      let result = await createZohoLead(connection.api_domain, accessToken, visitor as Record<string, string | null>, (connection as { default_owner_id?: string | null }).default_owner_id);
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("id, ai_agent_id")
+        .eq("visitor_id", visitorId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let leadSource = DEFAULT_LEAD_SOURCE;
+      if (conv?.ai_agent_id) {
+        const { data: persona } = await supabase
+          .from("ai_agents")
+          .select("lead_source")
+          .eq("id", conv.ai_agent_id)
+          .maybeSingle();
+        if (persona?.lead_source) leadSource = persona.lead_source;
+      }
+
+      const ownerId = (connection as { default_owner_id?: string | null }).default_owner_id;
+      let result = await createZohoLead(connection.api_domain, accessToken, visitor as Record<string, string | null>, ownerId, leadSource);
 
       // On 401 specifically: refresh token and retry once
       if (result.status === 401) {
@@ -575,7 +602,7 @@ Deno.serve(async (req) => {
         const newToken = await refreshAccessToken(supabase, connection as Record<string, string>);
         if (newToken) {
           accessToken = newToken;
-          result = await createZohoLead(connection.api_domain, accessToken, visitor as Record<string, string | null>, (connection as { default_owner_id?: string | null }).default_owner_id);
+          result = await createZohoLead(connection.api_domain, accessToken, visitor as Record<string, string | null>, ownerId, leadSource);
         }
       }
 
@@ -625,14 +652,6 @@ Deno.serve(async (req) => {
       }
 
       // Record successful export
-      const { data: conv } = await supabase
-        .from("conversations")
-        .select("id")
-        .eq("visitor_id", visitorId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
       await supabase.from("zoho_exports").insert({
         visitor_id: visitorId,
         conversation_id: conv?.id || null,
