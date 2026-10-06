@@ -143,6 +143,21 @@ async function pickCalendlyForConversation(sb: any, conversationId: string, urls
   return picked;
 }
 
+// The widget tells us which persona is fronting the chat, but it's an
+// unauthenticated caller, so only trust an id that is actually assigned to the
+// property. Returns null for anything else — the Zoho export then falls back to
+// the default Lead_Source rather than attributing the lead to a stranger.
+async function resolveServingAgentId(sb: any, aiAgentId: unknown, propertyId: string): Promise<string | null> {
+  if (!aiAgentId || typeof aiAgentId !== "string") return null;
+  const { data: assignment } = await sb
+    .from("ai_agent_properties")
+    .select("ai_agent_id")
+    .eq("ai_agent_id", aiAgentId)
+    .eq("property_id", propertyId)
+    .maybeSingle();
+  return assignment ? aiAgentId : null;
+}
+
 // Major Western cities — used as a "re-qualifying signal" when a doctor
 // mentions they work / practice / live in one of these. A doctor saying
 // "I've been working in Cambridge for 5 years" should be treated as
@@ -263,18 +278,8 @@ Deno.serve(async (req) => {
         const propertyAiEnabled = propRow?.ai_enabled !== false;
 
         // Record which persona is fronting this chat — the Zoho export reads its
-        // lead_source. The widget supplies the id, so confirm it's actually
-        // assigned to this property before trusting it.
-        let servingAgentId: string | null = null;
-        if (aiAgentId) {
-          const { data: assignment } = await supabase
-            .from("ai_agent_properties")
-            .select("ai_agent_id")
-            .eq("ai_agent_id", aiAgentId)
-            .eq("property_id", propertyId)
-            .maybeSingle();
-          servingAgentId = assignment ? aiAgentId : null;
-        }
+        // lead_source.
+        const servingAgentId = await resolveServingAgentId(supabase, aiAgentId, propertyId);
 
         // Create new conversation
         const { data: newConv, error: convCreateErr } = await supabase
@@ -329,9 +334,26 @@ Deno.serve(async (req) => {
     // phone_asked_at to detect decline replies)
     const { data: conv } = await supabase
       .from("conversations")
-      .select("status, ai_enabled, property_id, phone_asked_at")
+      .select("status, ai_enabled, property_id, phone_asked_at, ai_agent_id")
       .eq("id", conversationId)
       .single();
+
+    // Backfill the fronting persona onto a conversation that predates the
+    // stamp. The widget reuses a conversation it finds at bootstrap — with no
+    // age limit — so a returning visitor (or anyone whose chat started before
+    // this column existed) keeps writing into a row with ai_agent_id NULL, and
+    // the Zoho export then files the lead under the default Lead_Source. Only
+    // fills a NULL; the persona that opened the chat stays authoritative.
+    if (!conversationCreated && !conv?.ai_agent_id && conv?.property_id) {
+      const servingAgentId = await resolveServingAgentId(supabase, aiAgentId, conv.property_id);
+      if (servingAgentId) {
+        await supabase
+          .from("conversations")
+          .update({ ai_agent_id: servingAgentId })
+          .eq("id", conversationId)
+          .is("ai_agent_id", null);
+      }
+    }
 
     // If this is a visitor message, enforce the property-level AI kill switch.
     // If the property has ai_enabled=false, immediately disable AI on this conversation
